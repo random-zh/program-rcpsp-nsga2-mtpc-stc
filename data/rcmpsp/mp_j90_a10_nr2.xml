@@ -1,0 +1,56 @@
+<!DOCTYPE mp-list SYSTEM "mp.dtd">
+<mp-list>
+	<mp>
+		<name>mp_j90_a10_nr2</name>
+		<project-list>
+			<project>
+				<filename>KolischInstanzen/j90/j9015_1.sm</filename>
+				<start>0</start>
+			</project>
+			<project>
+				<filename>KolischInstanzen/j90/j9015_2.sm</filename>
+				<start>5</start>
+			</project>
+			<project>
+				<filename>KolischInstanzen/j90/j9015_3.sm</filename>
+				<start>15</start>
+			</project>
+			<project>
+				<filename>KolischInstanzen/j90/j9015_4.sm</filename>
+				<start>15</start>
+			</project>
+			<project>
+				<filename>KolischInstanzen/j90/j9015_5.sm</filename>
+				<start>20</start>
+			</project>
+			<project>
+				<filename>KolischInstanzen/j90/j9015_6.sm</filename>
+				<start>25</start>
+			</project>
+			<project>
+				<filename>KolischInstanzen/j90/j9015_7.sm</filename>
+				<start>35</start>
+			</project>
+			<project>
+				<filename>KolischInstanzen/j90/j9015_8.sm</filename>
+				<start>35</start>
+			</project>
+			<project>
+				<filename>KolischInstanzen/j90/j9015_9.sm</filename>
+				<start>40</start>
+			</project>
+			<project>
+				<filename>KolischInstanzen/j90/j9015_10.sm</filename>
+				<start>50</start>
+			</project>
+		</project-list>
+		<resources>
+			<resource>0</resource>
+			<resource>0</resource>
+			<resource>300</resource>
+			<resource>0</resource>
+		</resources>
+	</mp>
+</mp-list>
+
+

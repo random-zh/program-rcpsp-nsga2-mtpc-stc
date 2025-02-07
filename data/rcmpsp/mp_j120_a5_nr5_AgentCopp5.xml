@@ -1,0 +1,34 @@
+<!DOCTYPE mp-list SYSTEM "mp.dtd">
+<mp-list>
+<mp>
+<name>mp_j120_a5_nr5_AgentCopp5.xml </name>
+<project-list>
+<project>
+<filename>KolischInstanzen/j120/j1201_8.sm</filename>
+<start>0</start>
+</project>
+<project>
+<filename>KolischInstanzen/j120/j1203_4.sm</filename>
+<start>5</start>
+</project>
+<project>
+<filename>KolischInstanzen/j120/j12037_5.sm</filename>
+<start>15</start>
+</project>
+<project>
+<filename>KolischInstanzen/j120/j12037_8.sm</filename>
+<start>15</start>
+</project>
+<project>
+<filename>KolischInstanzen/j120/j12038_3.sm</filename>
+<start>20</start>
+</project>
+</project-list>
+<resources>
+<resource>25</resource>
+<resource>25</resource>
+<resource>25</resource>
+<resource>25</resource>
+</resources>
+</mp>
+</mp-list>

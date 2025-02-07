@@ -1,0 +1,57 @@
+<!DOCTYPE mp-list SYSTEM "mp.dtd">
+<mp-list>
+	<mp>
+		<name>mp_j120_a10_nr2</name>
+		<project-list>
+			<project>
+				<filename>KolischInstanzen/j120/j1201_1.sm</filename>
+				<start>0</start>
+			</project>
+			<project>
+				<filename>KolischInstanzen/j120/j1201_4.sm</filename>
+				<start>0</start>
+			</project>
+			<project>
+				<filename>KolischInstanzen/j120/j1202_4.sm</filename>
+				<start>5</start>
+			</project>
+			<project>
+				<filename>KolischInstanzen/j120/j1207_6.sm</filename>
+				<start>5</start>
+			</project>
+			<project>
+				<filename>KolischInstanzen/j120/j1208_4.sm</filename>
+				<start>10</start>
+			</project>
+			<project>
+				<filename>KolischInstanzen/j120/j1209_1.sm</filename>
+				<start>10</start>
+			</project>
+			<project>
+				<filename>KolischInstanzen/j120/j12011_4.sm</filename>
+				<start>15</start>
+			</project>
+			<project>
+				<filename>KolischInstanzen/j120/j12011_6.sm</filename>
+				<start>15</start>
+			</project>
+			<project>
+				<filename>KolischInstanzen/j120/j12011_8.sm</filename>
+				<start>20</start>
+			</project>
+			<project>
+				<filename>KolischInstanzen/j120/j12013_4.sm</filename>
+				<start>20</start>
+			</project>
+		</project-list>
+		<resources>
+			<resource>100</resource>
+			<resource>0</resource>
+			<resource>0</resource>
+			<resource>0</resource>
+		</resources>
+	</mp>
+</mp-list>
+
+
+

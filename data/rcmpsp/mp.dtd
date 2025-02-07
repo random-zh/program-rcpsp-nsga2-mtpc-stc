@@ -1,0 +1,12 @@
+<!ELEMENT mp-list (mp)>
+<!ELEMENT mp (name,project-list,resources)>
+<!ELEMENT project-list (project)+>
+<!ELEMENT project (filename,start)>
+<!ELEMENT start (#PCDATA)>
+<!ELEMENT filename (#PCDATA)>
+<!ELEMENT name (#PCDATA)>
+<!ELEMENT resources (resource,resource,resource,resource)>
+<!ELEMENT resource (#PCDATA)>
+<!ELEMENT resource (#PCDATA)>
+<!ELEMENT resource (#PCDATA)>
+<!ELEMENT resource (#PCDATA)>

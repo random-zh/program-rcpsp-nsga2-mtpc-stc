@@ -1,0 +1,22 @@
+<!DOCTYPE mp-list SYSTEM "mp.dtd">
+<mp-list>
+<mp>
+<name>mp_j90_a2_nr5_AgentCopp3.xml </name>
+<project-list>
+<project>
+<filename>KolischInstanzen/j90/j9017_3.sm</filename>
+<start>0</start>
+</project>
+<project>
+<filename>KolischInstanzen/j90/j9026_5.sm</filename>
+<start>5</start>
+</project>
+</project-list>
+<resources>
+<resource>20</resource>
+<resource>20</resource>
+<resource>20</resource>
+<resource>20</resource>
+</resources>
+</mp>
+</mp-list>

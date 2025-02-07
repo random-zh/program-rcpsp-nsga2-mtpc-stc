@@ -1,0 +1,25 @@
+<!DOCTYPE mp-list SYSTEM "mp.dtd">
+<mp-list>
+	<mp>
+		<name>mp_j30_a2_nr4</name>
+		<project-list>
+			<project>
+				<filename>KolischInstanzen/j30/j309_9.sm</filename>
+				<start>0</start>
+			</project>
+			<project>
+				<filename>KolischInstanzen/j30/j3033_3.sm</filename>
+				<start>7</start>
+			</project>
+		</project-list>
+		<resources>
+			<resource>18</resource>
+			<resource>27</resource>
+			<resource>27</resource>
+			<resource>0</resource>
+		</resources>
+	</mp>
+</mp-list>
+
+     
+  

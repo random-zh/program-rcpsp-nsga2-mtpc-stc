@@ -1,0 +1,35 @@
+<!--<!DOCTYPE mp-list SYSTEM "mp.dtd">-->
+<mp-list>
+	<mp>
+		<name>Joe</name>
+		<project-list>
+			<project>
+				<filename>null</filename>
+				<id>1</id>
+				<successors>2,3</successors>
+
+			</project>
+			<project>
+				<filename>KolischInstanzen/j30/j3015_4.sm</filename>
+				<id>2</id>
+				<successors>4</successors>
+			</project>
+			<project>
+				<filename>KolischInstanzen/j30/j3018_3.sm</filename>
+								<id>3</id>
+				<successors>4</successors>
+			</project>
+			<project>
+				<filename>null</filename>
+								<id>4</id>
+				<successors></successors>
+			</project>												
+		</project-list>
+		<resources>
+			<resource>55</resource>
+			<resource>0</resource>
+			<resource>0</resource>
+			<resource>0</resource>
+		</resources>
+	</mp>
+</mp-list>

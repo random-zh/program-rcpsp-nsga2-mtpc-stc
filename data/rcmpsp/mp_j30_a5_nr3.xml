@@ -1,0 +1,35 @@
+<!DOCTYPE mp-list SYSTEM "mp.dtd">
+<mp-list>
+	<mp>
+		<name>mp_j30_a5_nr3</name>
+		<project-list>
+			<project>
+				<filename>KolischInstanzen/j30/j3013_9.sm</filename>
+				<start>0</start>
+			</project>
+			<project>
+				<filename>KolischInstanzen/j30/j3017_1.sm</filename>
+				<start>7</start>
+			</project>
+			<project>
+				<filename>KolischInstanzen/j30/j3025_9.sm</filename>
+				<start>11</start>
+			</project>
+			<project>
+				<filename>KolischInstanzen/j30/j3029_4.sm</filename>
+				<start>15</start>
+			</project>
+			<project>
+				<filename>KolischInstanzen/j30/j3037_3.sm</filename>
+				<start>20</start>
+			</project>
+			
+		</project-list>
+		<resources>
+			<resource>44</resource>
+			<resource>40</resource>
+			<resource>0</resource>
+			<resource>0</resource>
+		</resources>
+	</mp>
+</mp-list>

@@ -1,0 +1,19 @@
+# config/settings.yaml
+
+algorithm:
+  name: "NSGA-II"
+  population_size: 100
+  generations: 200
+  crossover_probability: 0.9
+  mutation_probability: 0.1
+  crossover_eta: 15.0
+  mutation_eta: 20.0
+  selection: "tournament"
+  tournament_size: 2
+
+project:
+  input_file: "data/rempsp/program.xml"
+  output_dir: "results/"
+  log_level: "INFO"
+  seed: 42
+  resource_overflow_penalty: 1e6
