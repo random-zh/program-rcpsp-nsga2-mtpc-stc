@@ -9,6 +9,7 @@ from .problem import Project, Activity, Program
 from utils.config_loader import config
 from gurobipy import Model, GRB, quicksum
 
+
 class Schedule:
     """调度类：核心调度逻辑，管理活动优先级、资源分配及目标计算"""
 
@@ -886,3 +887,207 @@ class MTPCAlgorithm:
 
         self.tpc += tpc
         return tpc
+
+
+class ArtiguesAlgorithm:
+    """
+    Artigues算法（项目群层面）：生成可行性资源流网络（不优化鲁棒性）
+    """
+
+    def __init__(self, program: Program):
+        self.program = program
+        self.alloc: Dict[str, Dict[str, int]] = {}  # {项目ID: {资源类型: 量}}
+        self.resource_arcs: Set[Tuple[str, str, str]] = set()  # 资源弧 (i, j, k)
+
+    def run(self) -> Dict[str, Any]:
+        """执行算法主流程"""
+        self._initialize_alloc()
+        sorted_projects = self._get_sorted_projects()
+
+        for proj in sorted_projects:
+            self._allocate_resources(proj)
+
+        return {
+            "allocations": self.alloc,
+            "resource_arcs": self.resource_arcs
+        }
+
+    def _initialize_alloc(self) -> None:
+        """初始化资源分配：虚拟项目0拥有全部资源"""
+        self.alloc["0"] = {res: cap for res, cap in self.program.global_resources.items()}
+        for proj_id in self.program.projects:
+            self.alloc[proj_id] = {res: 0 for res in self.program.global_resources}
+
+    def _get_sorted_projects(self) -> List[Project]:
+        """按基准开始时间升序返回项目"""
+        return sorted(
+            self.program.projects.values(),
+            key=lambda p: p.start_time
+        )
+
+    def _allocate_resources(self, proj: Project) -> None:
+        """为项目分配资源"""
+        for res in self.program.global_resources:
+            req = proj.shared_resources_request.get(res, 0)
+            if req <= 0:
+                continue
+
+            # 从虚拟项目0分配资源
+            if self.alloc["0"][res] >= req:
+                flow = req
+                self.alloc[proj.project_id][res] += flow
+                self.alloc["0"][res] -= flow
+                self.resource_arcs.add(("0", proj.project_id, res))
+            else:
+                # 从已完成项目分配资源（简化实现）
+                for h_proj in self._get_completed_projects(proj.start_time):
+                    if self.alloc[h_proj.project_id][res] > 0:
+                        flow = min(req, self.alloc[h_proj.project_id][res])
+                        self.alloc[proj.project_id][res] += flow
+                        self.alloc[h_proj.project_id][res] -= flow
+                        self.resource_arcs.add((h_proj.project_id, proj.project_id, res))
+                        req -= flow
+                        if req == 0:
+                            break
+
+    def _get_completed_projects(self, current_time: int) -> List[Project]:
+        """获取在当前时间前已完成的项目"""
+        return [
+            p for p in self.program.projects.values()
+            if p.start_time + p.total_duration <= current_time
+        ]
+
+
+class STCAlgorithm:
+    """
+    STC算法类：在资源分配基础上插入缓冲以提升鲁棒性
+    核心步骤：
+    1. 计算每个活动的开始时间关键度（stc值）
+    2. 按stc值降序尝试插入缓冲
+    3. 验证缓冲插入后的可行性与鲁棒性提升
+    """
+
+    def __init__(self, program: Program):
+        self.program = program
+        self.best_schedule = None  # 存储最优调度计划
+        self.current_schedule = None  # 当前调度计划
+        self.buffer_added = []  # 记录已插入的缓冲
+
+    def run(self, max_iter: int = 100) -> Dict[str, Any]:
+        """执行STC主流程"""
+        # 初始化：复制基准调度计划
+        self.current_schedule = deepcopy(self.program)
+        self.best_schedule = deepcopy(self.program)
+        best_robustness = self._calculate_robustness(self.best_schedule)
+
+        # 迭代优化
+        for _ in range(max_iter):
+            # 计算所有活动的stc值
+            stc_values = self._calculate_stc_values()
+            # 按stc值降序排序活动
+            sorted_activities = self._sort_activities_by_stc(stc_values)
+            improvement_found = False
+
+            for act in sorted_activities:
+                # 跳过stc值为0的活动
+                if stc_values[act.activity_id] <= 0:
+                    continue
+
+                # 尝试在活动前插入缓冲
+                original_start = act.es
+                new_start = original_start + 1  # 插入1单位缓冲
+                self._update_schedule(act, new_start)
+
+                # 检查资源可行性和鲁棒性提升
+                if self._is_schedule_feasible() and self._is_robustness_improved():
+                    self.best_schedule = deepcopy(self.current_schedule)
+                    improvement_found = True
+                    self.buffer_added.append(act.activity_id)
+                    break  # 进入下一轮迭代
+                else:
+                    # 回退缓冲插入
+                    self._update_schedule(act, original_start)
+
+            if not improvement_found:
+                break  # 无进一步优化可能
+
+        return {
+            "best_schedule": self.best_schedule,
+            "buffers_added": self.buffer_added,
+            "final_robustness": self._calculate_robustness(self.best_schedule)
+        }
+
+    def _calculate_stc_values(self) -> Dict[int, float]:
+        """计算所有活动的stc值（公式4-9, 4-10）"""
+        stc_values = {}
+        for proj in self.current_schedule.projects.values():
+            for act in proj.activities.values():
+                gamma_j = 0.0
+                # 遍历所有前驱活动
+                for pred_id in act.predecessors:
+                    pred_act = self._find_activity(pred_id)
+                    lpl = self._calculate_lpl(pred_act, act)
+                    # 简化假设：P(d_j > s_j - s_i - LPL) = 0.2（需根据实际数据调整）
+                    prob = 0.2 if (act.es - pred_act.es - lpl) < pred_act.duration else 0.0
+                    gamma_j += prob
+                stc = gamma_j * act.priority
+                stc_values[act.activity_id] = stc
+        return stc_values
+
+    def _calculate_lpl(self, pred_act: Activity, succ_act: Activity) -> int:
+        """计算最长路径LPL(i,j)（简化为前驱活动工期之和）"""
+        return pred_act.duration  # 可扩展为关键路径计算
+
+    def _sort_activities_by_stc(self, stc_values: Dict[int, float]) -> List[Activity]:
+        """按stc值降序返回活动列表"""
+        all_activities = []
+        for proj in self.current_schedule.projects.values():
+            all_activities.extend(proj.activities.values())
+        return sorted(
+            all_activities,
+            key=lambda x: stc_values.get(x.activity_id, 0),
+            reverse=True
+        )
+
+    def _update_schedule(self, act: Activity, new_start: int) -> None:
+        """更新活动的开始时间，并调整后续活动的时序"""
+        # 调整当前活动开始时间
+        act.es = new_start
+        act.ef = new_start + act.duration
+        # 递归调整所有后继活动（简化实现，实际需处理资源冲突）
+        for succ_id in act.successors:
+            succ_act = self._find_activity(succ_id)
+            if succ_act.es < act.ef:
+                self._update_schedule(succ_act, act.ef)
+
+    def _is_schedule_feasible(self) -> bool:
+        """检查调度计划是否可行（资源约束满足）"""
+        # 简化实现：假设资源已由MTPC/Artigues分配完成，仅检查时间冲突
+        for proj in self.current_schedule.projects.values():
+            for act in proj.activities.values():
+                for pred_id in act.predecessors:
+                    pred_act = self._find_activity(pred_id)
+                    if act.es < pred_act.ef:
+                        return False
+        return True
+
+    def _is_robustness_improved(self) -> bool:
+        """检查鲁棒性是否提升（简化实现）"""
+        current_robustness = self._calculate_robustness(self.current_schedule)
+        best_robustness = self._calculate_robustness(self.best_schedule)
+        return current_robustness > best_robustness
+
+    def _calculate_robustness(self, program: Program) -> float:
+        """计算调度计划的鲁棒性（示例：基于缓冲总长度）"""
+        robustness = 0.0
+        for proj in program.projects.values():
+            for act in proj.activities.values():
+                robustness += (act.es - self.program.projects[proj.project_id].activities[act.activity_id].es)
+        return robustness
+
+    def _find_activity(self, act_id: int) -> Optional[Activity]:
+        """根据ID查找活动"""
+        for proj in self.current_schedule.projects.values():
+            if act_id in proj.activities:
+                return proj.activities[act_id]
+        return None
