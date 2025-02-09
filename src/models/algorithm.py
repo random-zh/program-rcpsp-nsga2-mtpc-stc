@@ -42,7 +42,7 @@ class Schedule:
         violations = []
         for act in self.project.activities.values():
             current_priority = self.priority_order.get(act.activity_id, 0)
-            # 检查所有后继活动的优先级是否不高于当前活动
+            # 检查所有后继活动的优先级是否不高于当前活动（越小优先级越高）
             for succ_id in act.successors:
                 succ_act = self.project.activities.get(succ_id)
                 if not succ_act:
@@ -50,7 +50,7 @@ class Schedule:
                         f" 活动 {act.activity_id} 的紧后活动 {succ_id} 不存在 "
                     )
                 succ_priority = self.priority_order.get(succ_id, 0)
-                if succ_priority >= current_priority:
+                if succ_priority <= current_priority:
                     violations.append(
                         f"活动 {act.activity_id} (优先级={current_priority}) -> "
                         f"活动 {succ_id} (优先级={succ_priority}) 违反紧后约束"
@@ -70,7 +70,7 @@ class Schedule:
         # 按优先级排序活动
         sorted_activities = sorted(
             self.project.activities.values(),
-            key=lambda act: self.priority_order.get(act.id, 0),
+            key=lambda act: self.priority_order.get(act.activity_id, 0),
             reverse=True
         )
 
@@ -270,8 +270,9 @@ class Individual:
     def _init_schedule(self) -> None:
         """初始化调度并计算适应度"""
         # 1. 将染色体转换为优先级字典
-        priority_order = {act_id: idx for idx, act_id in enumerate(self.chromosome)}
-
+        priority_order = {act_id: idx + 1 for idx, act_id in enumerate(self.chromosome)}
+        # 将染色体转换为优先级字典并按活动ID排序
+        # priority_order = {act_id: idx + 1 for idx, act_id in sorted(enumerate(self.chromosome), key=lambda x: x[1])}
         # 2. 生成调度
         self.schedule = Schedule(self.project)
         self.schedule.priority_order = priority_order
@@ -526,7 +527,6 @@ class NSGA2Algorithm:
         self._print_final_knee_info()
         # 迭代结束后，将最优Knee点的共享资源需求注入Project
         self._update_project_with_knee_solution()
-
 
     def _get_current_pareto_front(self) -> List[Individual]:
         """获取当前代的帕累托前沿第一层"""

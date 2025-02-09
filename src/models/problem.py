@@ -110,7 +110,7 @@ class Project:
         if not isinstance(activity, Activity):
             raise TypeError("必须传入Activity对象")
         if activity.activity_id in self.activities:
-            raise ValueError(f"活动ID {activity.id} 已存在！")
+            raise ValueError(f"活动ID {activity.activity_id} 已存在！")
         self.activities[activity.activity_id] = activity
 
 

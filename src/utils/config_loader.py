@@ -11,7 +11,7 @@ def load_config(config_file: str = "config/settings.yaml") -> Dict[str, Any]:
     :param config_file: 配置文件路径（相对于项目根目录）
     :return: 配置字典
     """
-    project_root = Path(__file__).resolve().parent.parent
+    project_root = Path(__file__).resolve().parent.parent.parent
     config_path = project_root / config_file
 
     if not config_path.exists():

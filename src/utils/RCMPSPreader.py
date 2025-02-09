@@ -46,7 +46,7 @@ class RCMPSPreader:
 
             # 解析.sm文件生成Project对象
             if sm_file != "null":
-                project = self._read_sm_file(os.path.join(self.base_path, sm_file), project_id, successors)
+                project = self.read_sm_file(os.path.join(self.base_path, sm_file), project_id, successors)
             # 虚活动
             else:
                 project = Project(
@@ -60,7 +60,7 @@ class RCMPSPreader:
 
         return self.program
 
-    def _read_sm_file(self, sm_path: str, project_id, successors) -> Project:
+    def read_sm_file(self, sm_path: str, project_id, successors) -> Project:
         """解析单个.sm文件，生成Project对象"""
         with open(sm_path, 'r') as f:
             lines = f.readlines()

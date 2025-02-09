@@ -40,7 +40,7 @@ def setup_directories(base_dir: str = "res") -> str:
 # 核心业务逻辑
 # --------------------------
 class ProjectOptimizer:
-    def __init__(self, instance_root: str = "data/KolischInstanzen"):
+    def __init__(self, instance_root: str = "data/rcmpsp/KolischInstanzen"):
         self.instance_root = Path(instance_root)
         self.visualizer = ProgramVisualizer()
 
@@ -61,24 +61,20 @@ class ProjectOptimizer:
 
     def process_sm_file(self, sm_file: Path, output_dir: Path) -> Dict:
         """处理单个项目文件"""
-        try:
-            # 读取并修改项目配置
-            project = self._create_project_from_sm(sm_file)
-            logging.info(f"Processing {sm_file.stem} with {len(project.activities)} activities")
+        # 读取并修改项目配置
+        project = self._create_project_from_sm(sm_file)
+        logging.info(f"Processing {sm_file.stem} with {len(project.activities)} activities")
 
-            # 运行NSGA-II优化
-            nsga_data = self.run_nsga_for_project(project, output_dir)
+        # 运行NSGA-II优化
+        nsga_data = self.run_nsga_for_project(project, output_dir)
 
-            # 收集结果数据
-            return {
-                "project_id": sm_file.stem,
-                "activities": len(project.activities),
-                "resources": project.local_resources,
-                "optimization": nsga_data
-            }
-        except Exception as e:
-            logging.error(f"Error processing {sm_file}: {str(e)}")
-            return None
+        # 收集结果数据
+        return {
+            "project_id": sm_file.stem,
+            "activities": len(project.activities),
+            "resources": project.local_resources,
+            "optimization": nsga_data
+        }
 
     def _create_project_from_sm(self, sm_file: Path) -> Project:
         """从SM文件创建项目对象，修改第一个资源为共享"""
@@ -86,7 +82,7 @@ class ProjectOptimizer:
         dummy_program = Program(program_id="dummy", global_resources={})
 
         # 读取原始项目
-        project = reader._read_sm_file(str(sm_file), "temp", [])
+        project = reader.read_sm_file(str(sm_file), "temp", [])
 
         # 修改第一个资源为无限共享资源
         if project.local_resources:
@@ -102,8 +98,7 @@ class ProjectOptimizer:
         # 初始化算法
         nsga = NSGA2Algorithm(
             project=project,
-            program=Program(program_id="single", global_resources={}),
-            save_intermediate=True
+            program=Program(program_id="single", global_resources={})
         )
 
         # 运行优化
