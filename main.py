@@ -3,22 +3,24 @@ import os
 import json
 import logging
 from datetime import datetime
-from copy import deepcopy
-import matplotlib.pyplot as plt
-import numpy as np
-from utils.config_loader import config
-from models.problem import Program, Project, Activity
-from models.algorithm import MTPCAlgorithm, ArtiguesAlgorithm, STCAlgorithm
-from utils.simulation import SimulationRunner
 
+from utils.config_loader import config
+from utils.RCMPSPreader import RCMPSPreader
+from models.algorithm import (
+    NSGA2Algorithm,
+    GurobiAlgorithm,
+    MTPCAlgorithm,
+    ArtiguesAlgorithm,
+    STCAlgorithm
+)
+from utils.simulation import SimulationRunner
+from utils.painter import ProgramVisualizer
 
 # --------------------------
 # 配置全局路径与日志
 # --------------------------
-from utils.RCMPSPreader import RCMPSPreader
 
-
-def setup_directories(base_dir="res"):
+def setup_directories(base_dir: str = "res") -> str:
     """创建结果目录并配置日志"""
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     res_dir = os.path.join(base_dir, f"run_{timestamp}")
@@ -27,174 +29,164 @@ def setup_directories(base_dir="res"):
     # 配置日志
     logging.basicConfig(
         filename=os.path.join(res_dir, "execution.log"),
-        level=logging.INFO,
-        format="%(asctime)s - %(levelname)s - %(message)s"
+        level=logging.getLevelName(config["project"]["log_level"]),
+        format="%(asctime)s - %(levelname)s - %(message)s",
+        handlers=[
+            logging.FileHandler(os.path.join(res_dir, "execution.log")),
+            logging.StreamHandler()
+        ]
     )
     return res_dir
 
 
 # --------------------------
-# 可视化模块
-# --------------------------
-def plot_resource_allocation(program: Program, save_path: str):
-    """绘制全局资源分配图"""
-    resources = list(program.global_resources.keys())
-    time_max = max(p.start_time + p.total_duration for p in program.projects.values())
-
-    fig, axes = plt.subplots(len(resources), 1, figsize=(10, 6))
-    for i, res in enumerate(resources):
-        usage = [0] * (time_max + 1)
-        for proj in program.projects.values():
-            for t in range(proj.start_time, proj.start_time + proj.total_duration):
-                if t <= time_max:
-                    usage[t] += proj.shared_resources_request.get(res, 0)
-        axes[i].step(range(time_max + 1), usage, where="post", label=res)
-        axes[i].set_title(f"Resource {res} Usage")
-        axes[i].set_xlabel("Time")
-        axes[i].set_ylabel("Units")
-    plt.tight_layout()
-    plt.savefig(save_path)
-    plt.close()
-
-
-def plot_gantt(program: Program, save_path: str):
-    """绘制项目群甘特图"""
-    fig, ax = plt.subplots(figsize=(12, 6))
-    for i, (proj_id, proj) in enumerate(program.projects.items()):
-        ax.barh(proj_id, proj.total_duration, left=proj.start_time, alpha=0.6)
-    ax.set_xlabel("Time")
-    ax.set_ylabel("Projects")
-    ax.set_title("Program Gantt Chart")
-    plt.savefig(save_path)
-    plt.close()
-
-
-def plot_sc_distribution(sc_data: dict, save_path: str):
-    """绘制SC分布直方图"""
-    plt.figure(figsize=(10, 6))
-    for sigma, data in sc_data.items():
-        plt.hist(data["program_sc"], bins=30, alpha=0.5, label=f"σ={sigma}")
-    plt.xlabel("Schedule Compliance (SC)")
-    plt.ylabel("Frequency")
-    plt.title("SC Distribution Across Sigma Levels")
-    plt.legend()
-    plt.savefig(save_path)
-    plt.close()
-
-
-# --------------------------
 # 数据存储模块
 # --------------------------
-def save_results(data: dict, path: str):
+def save_results(data: dict, path: str) -> None:
     """保存数据为JSON"""
-    with open(path, "w") as f:
+    with open(path, 'w') as f:
         json.dump(data, f, indent=2)
+    logging.info("Saved results to: %s", path)
 
 
 # --------------------------
 # 主流程
 # --------------------------
 def main():
-    # 读取项目数据
-    reader = RCMPSPreader()
-    program = reader.read_program_xml(config["project"]["input_file"])
-    # 初始化路径和日志
-    res_dir = setup_directories()
-    logging.info("Initialized result directory: %s", res_dir)
+    try:
+        # 初始化路径和日志
+        res_dir = setup_directories()
+        visualizer = ProgramVisualizer()
+        logging.info("Initialized result directory: %s", res_dir)
 
-    # --------------------------
-    # 创建示例项目群
-    # --------------------------
-    projects = {
-        "P1": Project(
-            project_id="P1",
-            total_duration=10,
-            shared_resources_request={"R1": 2, "R2": 1},
-            predecessors=[],
-            start_time=0
-        ),
-        "P2": Project(
-            project_id="P2",
-            total_duration=8,
-            shared_resources_request={"R1": 3, "R2": 2},
-            predecessors=["P1"],
-            start_time=10
+        # --------------------------
+        # 阶段1：数据读取与预处理
+        # --------------------------
+        logging.info("[Phase 1] Loading program data")
+        reader = RCMPSPreader()
+        program = reader.read_program_xml(config["project"]["input_file"])
+        logging.info("Loaded program with %d projects", len(program.projects))
+
+        # --------------------------
+        # 阶段2：单项目优化 (NSGA-II)
+        # --------------------------
+        logging.info("[Phase 2] Single-project optimization with NSGA-II")
+        for proj_id, project in program.projects.items():
+            if not project.activities:
+                continue  # 跳过虚项目
+
+            logging.info("Optimizing project: %s", proj_id)
+            nsga = NSGA2Algorithm(project, program)
+            nsga.evolve()
+
+            # 保存帕累托前沿可视化
+            visualizer.plot_pareto_front(
+                population=nsga.population,
+                knee_point=nsga.best_knee,
+                save_path=os.path.join(res_dir, f"pareto_{proj_id}.png")
+            )
+
+            # 更新项目数据
+            project.total_duration = nsga.best_knee.schedule.total_duration
+            project.shared_resources_request = nsga.best_knee.project.shared_resources_request
+            logging.info("Project %s optimized. Makespan: %d", proj_id, project.total_duration)
+
+        # --------------------------
+        # 阶段3：项目群级调度 (Gurobi)
+        # --------------------------
+        logging.info("[Phase 3] Program-level scheduling with Gurobi")
+        gurobi = GurobiAlgorithm(program)
+        baseline_schedule = gurobi.solve()
+        save_results(baseline_schedule, os.path.join(res_dir, "baseline_schedule.json"))
+
+        # 可视化基准调度
+        visualizer.plot_gantt(
+            program=program,
+            save_path=os.path.join(res_dir, "baseline_gantt.png")
         )
-    }
-    program = Program(
-        program_id="DEMO",
-        global_resources={"R1": 5, "R2": 3},
-        projects=projects
-    )
-    logging.info("Created demo program with %d projects", len(projects))
 
-    # --------------------------
-    # 运行MTPC算法
-    # --------------------------
-    mtpc_dir = os.path.join(res_dir, "MTPC")
-    os.makedirs(mtpc_dir, exist_ok=True)
+        # --------------------------
+        # 阶段4：资源分配 (MTPC vs Artigues)
+        # --------------------------
+        logging.info("[Phase 4] Resource allocation")
 
-    mtpc = MTPCAlgorithm(program)
-    mtpc_result = mtpc.run()
-    logging.info("MTPC algorithm completed")
+        # MTPC 算法
+        mtpc_dir = os.path.join(res_dir, "MTPC")
+        os.makedirs(mtpc_dir, exist_ok=True)
 
-    # 保存结果和图片
-    save_results(mtpc_result, os.path.join(mtpc_dir, "allocations.json"))
-    plot_resource_allocation(mtpc_result["best_schedule"], os.path.join(mtpc_dir, "resource_usage.png"))
-    plot_gantt(mtpc_result["best_schedule"], os.path.join(mtpc_dir, "gantt.png"))
+        mtpc = MTPCAlgorithm(program)
+        mtpc_result = mtpc.run()
+        save_results(mtpc_result, os.path.join(mtpc_dir, "mtpc_result.json"))
+        visualizer.plot_resource_allocation(
+            program=program,
+            save_path=os.path.join(mtpc_dir, "mtpc_resource_allocation.png")
+        )
 
-    # --------------------------
-    # 运行STC算法
-    # --------------------------
-    stc_dir = os.path.join(res_dir, "STC")
-    os.makedirs(stc_dir, exist_ok=True)
+        # Artigues 算法（对比）
+        artigues_dir = os.path.join(res_dir, "Artigues")
+        os.makedirs(artigues_dir, exist_ok=True)
 
-    stc = STCAlgorithm(mtpc_result["best_schedule"])
-    stc_result = stc.run()
-    logging.info("STC algorithm completed")
+        artigues = ArtiguesAlgorithm(program)
+        artigues_result = artigues.run()
+        save_results(artigues_result, os.path.join(artigues_dir, "artigues_result.json"))
+        visualizer.plot_resource_allocation(
+            program=program,
+            save_path=os.path.join(artigues_dir, "artigues_resource_allocation.png")
+        )
 
-    save_results(stc_result, os.path.join(stc_dir, "buffers.json"))
-    plot_gantt(stc_result["best_schedule"], os.path.join(stc_dir, "gantt_with_buffers.png"))
+        # --------------------------
+        # 阶段5：鲁棒性优化 (STC)
+        # --------------------------
+        logging.info("[Phase 5] Robustness optimization with STC")
+        stc_dir = os.path.join(res_dir, "STC")
+        os.makedirs(stc_dir, exist_ok=True)
 
-    # --------------------------
-    # 运行仿真实验
-    # --------------------------
-    sim_dir = os.path.join(res_dir, "Simulation")
-    os.makedirs(sim_dir, exist_ok=True)
+        stc = STCAlgorithm(program)
+        stc_result = stc.run(max_iter=100)
+        save_results(stc_result, os.path.join(stc_dir, "stc_result.json"))
 
-    sigmas = [0.3, 0.6, 0.9]
-    sc_data = {}
-    for sigma in sigmas:
-        # 使用STC优化后的计划进行仿真
-        sim_program = deepcopy(stc_result["best_schedule"])
-        sc_results = SimulationRunner.run(sim_program, sigma)
-        sc_data[sigma] = sc_results
+        # 可视化带缓冲的调度
+        visualizer.plot_gantt(
+            program=program,
+            save_path=os.path.join(stc_dir, "stc_gantt.png")
+        )
 
-        # 保存每次仿真的详细结果
-        sigma_dir = os.path.join(sim_dir, f"sigma_{sigma}")
-        os.makedirs(sigma_dir, exist_ok=True)
-        save_results(sc_results, os.path.join(sigma_dir, "sc_results.json"))
+        # --------------------------
+        # 阶段6：仿真分析
+        # --------------------------
+        logging.info("[Phase 6] Simulation analysis")
+        sim_dir = os.path.join(res_dir, "Simulation")
+        os.makedirs(sim_dir, exist_ok=True)
 
-    # 绘制SC分布总图
-    plot_sc_distribution(sc_data, os.path.join(sim_dir, "sc_distribution.png"))
-    logging.info("Simulation completed for all sigma levels")
+        runner = SimulationRunner(
+            program=program,
+            output_dir=sim_dir
+        )
+        sigmas = [0.2, 0.5, 0.8]  # 扰动参数
+        runner.run(sigmas=sigmas, n_simulations=1000)
 
-    # --------------------------
-    # 整合最终报告
-    # --------------------------
-    report = {
-        "parameters": {
-            "sigmas": sigmas,
-            "resource_capacity": program.global_resources
-        },
-        "result_dirs": {
-            "MTPC": mtpc_dir,
-            "STC": stc_dir,
-            "Simulation": sim_dir
+        # --------------------------
+        # 生成最终报告
+        # --------------------------
+        report = {
+            "program_id": program.program_id,
+            "global_resources": program.global_resources,
+            "num_projects": len(program.projects),
+            "simulation_sigmas": sigmas,
+            "result_dirs": {
+                "baseline": res_dir,
+                "MTPC": mtpc_dir,
+                "Artigues": artigues_dir,
+                "STC": stc_dir,
+                "Simulation": sim_dir
+            }
         }
-    }
-    save_results(report, os.path.join(res_dir, "report.json"))
-    logging.info("Main process completed. Results saved to: %s", res_dir)
+        save_results(report, os.path.join(res_dir, "final_report.json"))
+        logging.info("All processes completed successfully!")
+
+    except Exception as e:
+        logging.error("Main process failed: %s", str(e), exc_info=True)
+        raise
 
 
 if __name__ == "__main__":

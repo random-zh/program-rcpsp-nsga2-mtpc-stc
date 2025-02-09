@@ -1,9 +1,8 @@
 # utils/painter.py
-from typing import List
-
-import matplotlib.pyplot as plt
-
 from models.algorithm import Individual
+import matplotlib.pyplot as plt
+from typing import List, Dict
+from models.problem import Program, Project, Activity
 
 
 class KneeVisualizer:
@@ -47,4 +46,101 @@ class KneeVisualizer:
         plt.legend()
         plt.grid(True)
         plt.savefig('final_pareto_front.png')
+        plt.close()
+
+
+class ProgramVisualizer:
+    """项目群可视化工具类"""
+
+    @staticmethod
+    def plot_resource_allocation(program: Program, save_path: str) -> None:
+        """绘制全局资源分配热力图"""
+        plt.figure(figsize=(12, 6))
+
+        # 获取资源列表和时间范围
+        resources = list(program.global_resources.keys())
+        time_points = max(
+            (p.start_time + p.total_duration for p in program.projects.values()),
+            default=0
+        ) + 1
+
+        # 创建数据矩阵
+        usage_data = []
+        for res in resources:
+            res_usage = [0] * time_points
+            for proj in program.projects.values():
+                start = proj.start_time
+                end = start + proj.total_duration
+                demand = proj.shared_resources_request.get(res, 0)
+                for t in range(start, min(end, time_points)):
+                    res_usage[t] += demand
+            usage_data.append(res_usage)
+
+        # 绘制热力图
+        plt.imshow(usage_data, cmap='YlOrRd', aspect='auto',
+                   extent=[0, time_points, 0, len(resources)])
+        plt.yticks(range(len(resources)), resources)
+        plt.colorbar(label='Resource Units')
+        plt.title("Global Resource Allocation Heatmap")
+        plt.xlabel("Time Period")
+        plt.ylabel("Resource Type")
+        plt.savefig(save_path)
+        plt.close()
+
+    @staticmethod
+    def plot_gantt(program: Program, save_path: str) -> None:
+        """绘制项目群甘特图（带资源标注）"""
+        fig, ax = plt.subplots(figsize=(15, 8))
+
+        projects = sorted(
+            program.projects.values(),
+            key=lambda p: p.start_time
+        )
+
+        # 绘制项目条
+        for idx, proj in enumerate(projects):
+            ax.barh(
+                y=idx,
+                width=proj.total_duration,
+                left=proj.start_time,
+                height=0.6,
+                label=f"{proj.project_id} (R: {proj.shared_resources_request})",
+                alpha=0.7
+            )
+
+        # 标注资源需求
+        for idx, proj in enumerate(projects):
+            ax.text(
+                x=proj.start_time + 0.1,
+                y=idx - 0.2,
+                s=f"{proj.shared_resources_request}",
+                fontsize=8,
+                va='top'
+            )
+
+        ax.set_yticks(range(len(projects)))
+        ax.set_yticklabels([p.project_id for p in projects])
+        ax.set_xlabel("Time")
+        ax.set_title("Program Gantt Chart with Resource Annotations")
+        ax.legend(loc='lower right')
+        plt.tight_layout()
+        plt.savefig(save_path)
+        plt.close()
+
+    @staticmethod
+    def plot_pareto_front(final_population: List, knee_point: any, save_path: str) -> None:
+        """绘制帕累托前沿"""
+        makespans = [ind.objectives[0] for ind in final_population]
+        robustness = [-ind.objectives[1] for ind in final_population]
+
+        plt.figure(figsize=(10, 6))
+        plt.scatter(makespans, robustness, c='grey', alpha=0.7, label='Pareto Front')
+        plt.scatter([knee_point.objectives[0]], [-knee_point.objectives[1]],
+                    c='red', s=100, marker='*', label='Knee Point')
+        plt.xlabel('Makespan')
+        plt.ylabel('Robustness')
+        plt.title('Pareto Front with Knee Point')
+        plt.legend()
+        plt.grid(True)
+        plt.savefig(save_path)
         plt.close()
