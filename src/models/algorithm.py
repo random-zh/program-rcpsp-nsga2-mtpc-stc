@@ -560,7 +560,7 @@ class NSGA2Algorithm:
             return
 
         # 判断候选解是否支配当前最优解
-        if (candidate.objectives[0] <= self.best_knee.objectives[0] and
+        if not (candidate.objectives[0] <= self.best_knee.objectives[0] and
                 candidate.objectives[1] <= self.best_knee.objectives[1] and
                 (candidate.objectives[0] < self.best_knee.objectives[0] or
                  candidate.objectives[1] < self.best_knee.objectives[1])):
