@@ -14,13 +14,6 @@ class Activity(object):
         predecessors (List[int]): 紧前活动ID列表
         successors (List[int]): 紧后活动ID列表
         priority (int): 调度优先级（越小越优先）
-        es (Optional[int]): 最早开始时间（调度前为None）
-        ef (Optional[int]): 最早完成时间（调度前为None）
-        ls (Optional[int]): 最晚开始时间（调度前为None）
-        lf (Optional[int]): 最晚完成时间（调度前为None）
-        tf (Optional[int]): 总时差（调度前为None）
-        ff (Optional[int]): 自由时差（调度前为None）
-        ciw (Optional[float]): 关键性指标（调度前为None）
     """
 
     def __init__(
@@ -48,13 +41,13 @@ class Activity(object):
 
         # === 时间参数初始化为None（表示未计算） ===
         # self.priority: Optional[int] = None
-        self.es: Optional[int] = None
-        self.ef: Optional[int] = None
-        self.ls: Optional[int] = None
-        self.lf: Optional[int] = None
-        self.tf: Optional[int] = None
-        self.ff: Optional[int] = None
-        self.ciw: Optional[float] = None
+        # self.es: Optional[int] = None
+        # self.ef: Optional[int] = None
+        # self.ls: Optional[int] = None
+        # self.lf: Optional[int] = None
+        # self.tf: Optional[int] = None
+        # self.ff: Optional[int] = None
+        # self.ciw: Optional[float] = None
 
         # === 紧前活动需通过方法动态添加 ===
         self.predecessors: List[int] = []

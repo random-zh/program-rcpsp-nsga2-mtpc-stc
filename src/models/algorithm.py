@@ -71,7 +71,7 @@ class Schedule:
         sorted_activities = sorted(
             self.project.activities.values(),
             key=lambda act: self.priority_order.get(act.activity_id, 0),
-            reverse=True
+            reverse=False
         )
 
         for act in sorted_activities:
@@ -103,8 +103,8 @@ class Schedule:
             # 本地资源检查
             if res in self.project.local_resources:
                 for t in range(start_time, start_time + act.duration):
-                    # if t >= len(self.resource_usage[res]):
-                    #     return True  # 假设超出预测范围时资源足够
+                    if t >= len(self.resource_usage[res]):
+                        raise Exception(f"资源时间轴长度不足：{res} @ {t}")
                     if self.resource_usage[res][t] + demand > self.project.local_resources[res]:
                         return False
         return True
@@ -183,15 +183,15 @@ class Schedule:
             feasible = True
             # 检查每个资源类型
             for res, demand in act.resource_request.items():
-                if res not in self.project.local_resources:
-                    continue  # 忽略非本地资源
+                # if res not in self.project.local_resources:
+                #     continue  # 忽略非本地资源
                 res_limit = self.project.local_resources[res]
 
                 # 检查时间段 [ef, ef + delta)
                 for t in range(ef, ef + delta):
                     # 处理时间轴越界（假设后续时间资源未被占用）
                     if t >= len(self.resource_usage[res]):
-                        available = 0
+                        raise Exception(f"资源时间轴长度不足：{res} @ {t}")
                     else:
                         available = self.resource_usage[res][t]
                     # 如果资源需求超过限额，标记为不可行
@@ -288,6 +288,7 @@ class Individual:
         """获取目标值（工期, -鲁棒性）"""
         return self.fitness
 
+    # === 个体支配关系比较 ===
     def __lt__(self, other: 'Individual') -> bool:
         """定义支配关系比较"""
         return (self.fitness[0] <= other.fitness[0]) and (self.fitness[1] <= other.fitness[1]) \
