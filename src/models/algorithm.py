@@ -681,11 +681,23 @@ class NSGA2Algorithm:
         # 归一化公式
         normalized = []
         for ind in front:
-            norm_makespan = (ind.objectives[0] - ideal[0]) / (nadir[0] - ideal[0])
-            norm_robustness = ((-ind.objectives[1]) - ideal[1]) / (nadir[1] - ideal[1])
+            # 计算 makespan 的归一化值
+            denominator_m = nadir[0] - ideal[0]
+            if denominator_m == 0:
+                norm_makespan = 0.0  # 所有个体的 makespan 相同，归一化为 0
+            else:
+                norm_makespan = (ind.objectives[0] - ideal[0]) / denominator_m
+
+            # 计算 robustness 的归一化值
+            denominator_r = nadir[1] - ideal[1]
+            if denominator_r == 0:
+                norm_robustness = 0.0  # 所有个体的 robustness 相同，归一化为 0
+            else:
+                norm_robustness = ((-ind.objectives[1]) - ideal[1]) / denominator_r
+
             normalized.append(norm_makespan + norm_robustness)  # MMD
 
-        # 选择MMD最小的个体
+        # 选择 MMD 最小的个体
         return front[normalized.index(min(normalized))]
 
 

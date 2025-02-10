@@ -178,7 +178,7 @@ class ProjectOptimizer:
 # 主流程
 # --------------------------
 def run_res_for_project():
-    """主执行方法（多线程优化版）"""
+    """主执行方法"""
     res_dir = setup_directories()
     optimizer = ProjectOptimizer()
 
@@ -186,72 +186,33 @@ def run_res_for_project():
     sm_files = optimizer.find_sm_files()
     logging.info(f"Found {len(sm_files)} SM files")
 
-    # 共享数据结构和锁
     final_report = []
-    report_lock = Lock()
-    progress_lock = Lock()
 
-    # 进度条初始化（线程安全）
-    with tqdm(total=len(sm_files), desc="Processing Files") as pbar:
-        def update_progress():
-            with progress_lock:
-                pbar.update(1)
+    for sm_file in sm_files:
+        # 为每个项目创建子目录
+        project_dir = Path(res_dir) / sm_file.stem
+        os.makedirs(project_dir, exist_ok=True)
 
-        # 线程池执行
-        with concurrent.futures.ThreadPoolExecutor(max_workers=os.cpu_count()*2) as executor:
-            futures = []
-            for sm_file in sm_files:
-                # 为每个任务创建独立目录
-                project_dir = Path(res_dir) / sm_file.stem
-                os.makedirs(project_dir, exist_ok=True)
+        # 处理项目
+        result: Dict = optimizer.process_sm_file(sm_file, project_dir)
 
-                # 提交任务到线程池
-                future = executor.submit(
-                    process_single_file,
-                    optimizer,
-                    sm_file,
-                    project_dir,
-                    report_lock,
-                    update_progress
-                )
-                futures.append(future)
+        if result:
+            final_report.append(result)
+            logging.info(f"Completed {sm_file.stem}")
 
-            # 收集结果并处理异常
-            for future in concurrent.futures.as_completed(futures):
-                try:
-                    result = future.result()
-                    if result:
-                        with report_lock:
-                            final_report.append(result)
-                except Exception as e:
-                    logging.error(f"Task failed: {str(e)}", exc_info=True)
+            # 输出单个文件结果为json文件
+            json_file_path = project_dir / f"{sm_file.stem}.json"
+            with open(json_file_path, 'w') as f:
+                json.dump(result, f, indent=2)
+
+        else:
+            raise ValueError(f"Failed to process {sm_file.stem}")
 
     # 保存总报告
     with open(Path(res_dir) / "final_report.json", 'w') as f:
         json.dump(final_report, f, indent=2)
 
     logging.info(f"All tasks completed. Results saved to: {res_dir}")
-
-def process_single_file(optimizer, sm_file, project_dir, report_lock, callback):
-    """单个文件的处理逻辑（线程安全）"""
-    try:
-        result = optimizer.process_sm_file(sm_file, project_dir)
-        if not result:
-            raise ValueError(f"Empty result for {sm_file.stem}")
-
-        # 保存独立结果文件
-        json_file_path = project_dir / f"{sm_file.stem}.json"
-        with report_lock:  # 确保文件写入顺序
-            with open(json_file_path, 'w') as f:
-                json.dump(result, f, indent=4)
-
-        # 记录日志
-        logging.info(f"Completed {sm_file.stem}")
-        callback()  # 更新进度条
-        return result
-    except Exception as e:
-        logging.error(f"Error processing {sm_file.stem}: {str(e)}")
-        raise
 
 if __name__ == "__main__":
     run_res_for_project()
