@@ -22,6 +22,9 @@ class Schedule:
         self.robustness: Optional[float] = None  # 鲁棒性指标
         self.resource_usage: Dict[str, List[int]] = {}  # 资源时间轴占用 {资源名: [时间轴]}
 
+        # === 共享资源需求（最后计算） ===
+        self.global_resources_request = None
+
         # === 鲁棒性计算缓存 ===
         self.ff_cache: Dict[int, int] = {}  # {活动ID: 自由时差}
         self.path_length_cache: Dict[int, int] = {}  # {活动ID: 到虚活动的路径长度}
@@ -31,6 +34,20 @@ class Schedule:
         max_duration_guess = sum(act.duration for act in self.project.activities.values())  # 所有活动工期之和
         for res in self.project.local_resources:
             self.resource_usage[res] = [0] * (max_duration_guess + 1)
+
+    # === 计算最大共享资源需求 ===
+    def _calculate_max_global_resources_request(self) -> None:
+        """计算最大共享资源需求"""
+        if not self.resource_usage:
+            raise Exception("资源时间轴未初始化")
+
+        # 获取第一个资源的名称
+        first_resource = next(iter(self.resource_usage.keys()))
+
+        # 计算该资源的最大占用量
+        max_demand = max(self.resource_usage[first_resource])
+
+        self.global_resources_request = max_demand
 
     # === 检测优先级顺序是否违背紧后关系约束 ===
     def validate_priority_order(self) -> None:
@@ -92,9 +109,10 @@ class Schedule:
             self._allocate_resources(act, start_time)
             self.start_times[act.activity_id] = start_time
 
-        # 计算总工期和鲁棒性
+        # 计算总工期和鲁棒性和最大共享资源需求
         self.calculate_total_duration()
         self.calculate_robustness()
+        self._calculate_max_global_resources_request()
 
     # === 私有资源管理方法 ===
     def _is_resource_available(self, act: Activity, start_time: int) -> bool:
@@ -264,7 +282,7 @@ class Individual:
         self.chromosome = chromosome or self._generate_constrained_chromosome()  # 染色体编码（活动优先级顺序）
         self.schedule: Optional[Schedule] = None
         self.fitness: Optional[float, float] = None  # (工期, -鲁棒性)
-        self.rank = None          # 非支配等级（第几层）
+        self.rank = None  # 非支配等级（第几层）
         self.crowding_distance = 0.0  # 拥挤度
 
         self._init_schedule()  # 初始化调度并计算适应度
@@ -368,7 +386,7 @@ class Individual:
             ) if act.successors else n - 1
 
             # 修正可行区域为 [left, right]
-            feasible_region = list(range(left, right + 1))
+            feasible_region = list(range(left+1, right))
             # 移除当前位置
             if i in feasible_region:
                 feasible_region.remove(i)
@@ -385,8 +403,14 @@ class Individual:
             # 插入新位置
             new_chromosome.insert(new_pos, act_id)
 
+        # 无变异直接返回
+        if new_chromosome == self.chromosome:
+            return
+
         # 更新染色体
         self.chromosome = new_chromosome
+        # 重新初始化调度
+        self._init_schedule()
 
 
 def _non_dominated_sort(population: List[Individual]) -> List[List[Individual]]:
@@ -424,10 +448,10 @@ def _non_dominated_sort(population: List[Individual]) -> List[List[Individual]]:
                 if domination_counts[dominated_idx] == 0:
                     population[dominated_idx].rank = current_front + 1
                     next_front.append(population[dominated_idx])
-        if next_front:
+        if 1 == 1:
             fronts.append(next_front)
             current_front += 1
-    return fronts
+    return fronts[:-1]  # 去除最后一个空层
 
 
 class NSGA2Algorithm:
@@ -443,6 +467,7 @@ class NSGA2Algorithm:
 
         self.history_knee_points = []  # 记录每次迭代的Knee点
         self.best_knee = None  # 全局最优Knee点
+        self.fronts = None  # 最终的非支配层级结果
 
         # 初始化种群
         self._initialize_population()
@@ -480,13 +505,13 @@ class NSGA2Algorithm:
             new_population = []
             remaining = self.pop_size
             for front in combined_fronts:
-                # 计算当前前沿的拥挤度
-                self._calculate_crowding_distance(front)
 
                 if len(front) <= remaining:
                     new_population.extend(front)
                     remaining -= len(front)
                 else:
+                    # 计算当前前沿的拥挤度
+                    self._calculate_crowding_distance(front)
                     # 按拥挤度排序选择
                     front_sorted = sorted(front, key=lambda x: x.crowding_distance, reverse=True)
                     new_population.extend(front_sorted[:remaining])
@@ -498,7 +523,14 @@ class NSGA2Algorithm:
             self._update_iteration_stats(gen)
 
         # 最终处理迭代完成后的信息
-        self._final_selection()
+
+        # 选择最优Knee点
+        front0 = [ind for ind in self.population if ind.rank == 0]
+        if front0:
+            self.best_knee = self._select_knee_point(front0)
+
+        # 最终非支配排序
+        self.fronts = _non_dominated_sort(self.population)
 
     def _update_iteration_stats(self, gen: int) -> None:
         """记录迭代统计信息"""
@@ -513,14 +545,6 @@ class NSGA2Algorithm:
                 "avg_crowding": np.mean([ind.crowding_distance for ind in front0])
             })
 
-    def _final_selection(self) -> None:
-        """最终选择最优解"""
-        front0 = [ind for ind in self.population if ind.rank == 0]
-        if front0:
-            self.best_knee = self._select_knee_point(front0)
-            self._update_project_with_knee_solution()
-
-    @staticmethod
     def _calculate_crowding_distance(self, front: List[Individual]) -> None:
         """改进的拥挤度计算（直接修改个体属性）"""
 
@@ -550,7 +574,6 @@ class NSGA2Algorithm:
                          front_sorted[i - 1].objectives[obj_idx]) / (max_obj - min_obj)
                 front_sorted[i].crowding_distance += delta
 
-    @staticmethod
     def _select_parents(self, fronts: List[List[Individual]]) -> List[Individual]:
         """二元锦标赛选择"""
         parents = []
@@ -633,11 +656,6 @@ class NSGA2Algorithm:
 
         return daughter, son
 
-    def _get_current_pareto_front(self) -> List[Individual]:
-        """获取当前代的帕累托前沿第一层"""
-        fronts = _non_dominated_sort(self.population)
-        return [self.population[i] for i in fronts[0]]
-
     def _select_knee_point(self, front: List[Individual]) -> Individual:
         """使用MMD方法选择当前前沿的Knee点"""
         # 归一化目标值
@@ -658,19 +676,6 @@ class NSGA2Algorithm:
         # 选择MMD最小的个体
         return front[normalized.index(min(normalized))]
 
-    def _update_best_knee(self, candidate: Individual) -> None:
-        """更新全局最优Knee点（支配关系比较）"""
-        if self.best_knee is None:
-            self.best_knee = candidate
-            return
-
-        # 判断候选解是否支配当前最优解
-        if not (candidate.objectives[0] <= self.best_knee.objectives[0] and
-                candidate.objectives[1] <= self.best_knee.objectives[1] and
-                (candidate.objectives[0] < self.best_knee.objectives[0] or
-                 candidate.objectives[1] < self.best_knee.objectives[1])):
-            self.best_knee = candidate
-
     def _print_final_knee_info(self) -> None:
         """输出最优Knee点的调度详情"""
         best_schedule = self.best_knee.schedule
@@ -681,23 +686,6 @@ class NSGA2Algorithm:
         for proj_id, proj in self.best_knee.project.projects.items():
             shared_res = proj.shared_resources_request
             print(f"  项目 {proj_id}: {shared_res}")
-
-    def _update_project_with_knee_solution(self) -> None:
-        """将最优Knee点的共享资源需求写入Project"""
-        if not self.best_knee:
-            return
-
-        # 获取调度中的共享资源需求
-        shared_resources = defaultdict(int)
-        for proj_id, proj in self.best_knee.project.projects.items():
-            for act in proj.activities.values():
-                for res, demand in act.resource_request.items():
-                    if res.startswith("global "):  # 假设共享资源以"global"为前缀
-                        shared_resources[res] += demand
-
-        # 更新Program中所有Project的 shared_resources_request
-        for proj in self.program.projects.values():
-            proj.shared_resources_request = dict(shared_resources)
 
 
 class GurobiAlgorithm:

@@ -12,7 +12,7 @@ import numpy as np
 from utils.config_loader import config
 from utils.RCMPSPreader import RCMPSPreader
 from models.problem import Program, Project, Activity
-from models.algorithm import NSGA2Algorithm
+from models.algorithm import NSGA2Algorithm, Individual
 from utils.painter import ProgramVisualizer
 
 
@@ -108,12 +108,16 @@ class ProjectOptimizer:
         self.save_iteration_data(nsga.history_knee_points, output_dir)
 
         # 保存帕累托前沿
-        self.save_pareto_front(nsga.population, nsga.best_knee, output_dir)
+        self.save_pareto_front(nsga.fronts, nsga.best_knee, output_dir)
+
+        # 得到最终调度
+        finnal_schedule = nsga.best_knee.schedule
 
         return {
             "makespan": nsga.best_knee.schedule.total_duration,
             "robustness": nsga.best_knee.schedule.robustness,
-            "iterations": len(nsga.history_knee_points)
+            "iterations": len(nsga.history_knee_points),
+            "global_resources":6,
         }
 
     def save_iteration_data(self, history: List[Dict], output_dir: Path):
@@ -130,20 +134,25 @@ class ProjectOptimizer:
                     entry["robustness"]
                 ])
 
-    def save_pareto_front(self, population: List, knee_point: any, output_dir: Path):
-        """保存帕累托前沿数据"""
-        # 保存原始数据
-        pareto_data = [{
-            "makespan": ind.objectives[0],
-            "robustness": -ind.objectives[1]
-        } for ind in population]
+    def save_pareto_front(self, fronts: List[List[Individual]], knee_point: Individual, output_dir: Path):
+        """保存帕累托前沿数据（包含front层级信息）"""
+        # 保存原始数据（包含front信息）
+        pareto_data = []
+        for front_idx, front in enumerate(fronts):
+            for ind in front:
+                pareto_data.append({
+                    "makespan": ind.objectives[0],
+                    "robustness": -ind.objectives[1],
+                    "front": front_idx,
+                    "is_knee": ind == knee_point
+                })
 
         with open(output_dir / "pareto_front.json", 'w') as f:
             json.dump(pareto_data, f, indent=2)
 
         # 生成可视化图表
         self.visualizer.plot_pareto_front(
-            population=population,
+            fronts=fronts,
             knee_point=knee_point,
             save_path=str(output_dir / "pareto_front.png")
         )

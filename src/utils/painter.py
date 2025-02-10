@@ -128,19 +128,39 @@ class ProgramVisualizer:
         plt.close()
 
     @staticmethod
-    def plot_pareto_front(final_population: List, knee_point: any, save_path: str) -> None:
-        """绘制帕累托前沿"""
-        makespans = [ind.objectives[0] for ind in final_population]
-        robustness = [-ind.objectives[1] for ind in final_population]
-
+    def plot_pareto_front(fronts: List[List[Individual]], knee_point: Individual, save_path: str) -> None:
+        """绘制带非支配层级的帕累托前沿"""
         plt.figure(figsize=(10, 6))
-        plt.scatter(makespans, robustness, c='grey', alpha=0.7, label='Pareto Front')
-        plt.scatter([knee_point.objectives[0]], [-knee_point.objectives[1]],
-                    c='red', s=100, marker='*', label='Knee Point')
-        plt.xlabel('Makespan')
-        plt.ylabel('Robustness')
-        plt.title('Pareto Front with Knee Point')
-        plt.legend()
-        plt.grid(True)
-        plt.savefig(save_path)
+
+        # 绘制各层前沿
+        for front_idx, front in enumerate(fronts):
+            makespans = [ind.objectives[0] for ind in front]
+            robustness = [-ind.objectives[1] for ind in front]
+
+            # 第一层用红色突出显示
+            color = 'red' if front_idx == 0 else 'grey'
+            alpha = 0.8 if front_idx == 0 else 0.4
+            label = 'Pareto Front (Rank 0)' if front_idx == 0 else f'Front {front_idx}'
+
+            plt.scatter(makespans, robustness,
+                        c=color, alpha=alpha,
+                        edgecolors='k', linewidths=0.5,
+                        label=label)
+
+        # 标注knee point
+        plt.scatter([knee_point.objectives[0]],
+                    [-knee_point.objectives[1]],
+                    c='gold', s=200, marker='*',
+                    edgecolor='k', linewidth=1,
+                    label='Knee Point')
+
+        plt.xlabel('Makespan', fontsize=12)
+        plt.ylabel('Robustness', fontsize=12)
+        plt.title('Pareto Front with Non-dominated Layers', fontsize=14)
+        plt.legend(loc='upper right', fontsize=10)
+        plt.grid(True, alpha=0.3)
+        plt.tight_layout()
+
+        # 保存高清图像
+        plt.savefig(save_path, dpi=300, bbox_inches='tight')
         plt.close()
