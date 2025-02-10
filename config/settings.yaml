@@ -17,9 +17,24 @@ project:
   resource_overflow_penalty: 1e6
 
 program:
-  total_global_resource: 100
+  total_global_resource: [100]
+  progarm_dic: {
+      1: { 'successors': [ 2, 3 ], 'predecessors': [ ] },
+      2: { 'successors': [ 5, 6 ], 'predecessors': [ 1 ] },
+      3: { 'successors': [ 4 ], 'predecessors': [ 1 ] },
+      4: { 'successors': [ 6, 7 ], 'predecessors': [ 3 ] },
+      5: { 'successors': [ 7 ], 'predecessors': [ 2 ] },
+      6: { 'successors': [ 8, 9 ], 'predecessors': [ 2, 4 ] },
+      7: { 'successors': [ 9 ], 'predecessors': [ 4, 5 ] },
+      8: { 'successors': [ 12 ], 'predecessors': [ 6 ] },
+      9: { 'successors': [ 10, 12 ], 'predecessors': [ 6, 7 ] },
+      10: { 'successors': [ 13 ], 'predecessors': [ 9 ] },
+      11: { 'successors': [ 13 ], 'predecessors': [ 7 ] },
+      12: { 'successors': [ 13 ], 'predecessors': [ 8, 9 ] },
+      13: { 'successors': [ ], 'predecessors': [ 10, 11, 12 ] } }
 
 
 file:
   j30_fil_num: 50
   j60_fil_num: 20
+  filelist: ["j3017_3", "j3010_9", "j301_1", "j3020_1", "j3048_3", "j308_3", "j3035_2", "j6039_9", "j6046_4", "j609_10", "j6042_8"]

@@ -40,8 +40,9 @@ class Activity(object):
         self.successors = successors
 
         # === 时间参数初始化为None（表示未计算） ===
-        # self.priority: Optional[int] = None
-        # self.es: Optional[int] = None
+        self.priority: Optional[int] = None
+        self.start_time: Optional[int] = None
+        self.es: Optional[int] = None
         # self.ef: Optional[int] = None
         # self.ls: Optional[int] = None
         # self.lf: Optional[int] = None
@@ -68,17 +69,20 @@ class Project:
 
     # === 核心属性 ===
     project_id: str  # 项目id
+
     local_resources: Dict[str, int]  # 本地资源限额（如 {"worker": 5}）
     successors: List[int]  # 项目间的依赖关系（后继项目ID列表）
     # === 紧前活动需通过方法动态添加 ===
     predecessors: List[int] = field(default_factory=list)
 
     # === 动态属性（初始化后由方法填充） ===
-    activities: Dict[int, Activity] = None  # 活动字典 {activity_id: Activity}
-    # total_duration: Optional[int] = None  # 项目总工期（调度后更新）
-    # shared_resources_request: Dict[str, int] = None  # 共享资源需求（如 {"machine": 2}）
+    total_duration: Optional[int] = None  # 项目总工期（调度后更新）
+    robustness: Optional[float] = None  # 项目鲁棒性（调度后更新）
+    global_resources_request: Dict[str, int] = None  # 共享资源需求（如 {"machine": 2}）
     start_time: Optional[int] = None  # 新增：项目的基准开始时间
     weight: int = 1  # 新增：项目的权重
+
+    activities: Dict[int, Activity] = None  # 活动字典 {activity_id: Activity}
 
     def __post_init__(self):
         """初始化后验证数据合法性"""

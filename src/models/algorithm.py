@@ -1,3 +1,4 @@
+# model/algorithm.py
 import math
 import random
 import numpy as np
