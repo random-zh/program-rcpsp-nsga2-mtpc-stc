@@ -21,19 +21,26 @@ class Schedule:
         self.total_duration: Optional[int] = None  # 总工期
         self.robustness: Optional[float] = None  # 鲁棒性指标
         self.resource_usage: Dict[str, List[int]] = {}  # 资源时间轴占用 {资源名: [时间轴]}
-
-        # === 共享资源需求（最后计算） ===
-        self.global_resources_request = None
+        self.global_resources_request: Optional[int] = None  # 最大共享资源需求
 
         # === 鲁棒性计算缓存 ===
         self.ff_cache: Dict[int, int] = {}  # {活动ID: 自由时差}
         self.path_length_cache: Dict[int, int] = {}  # {活动ID: 到虚活动的路径长度}
-        self.virtual_activity_id: int = self._find_virtual_activity()
 
         # === 初始化资源时间轴为0 ===
         max_duration_guess = sum(act.duration for act in self.project.activities.values())  # 所有活动工期之和
         for res in self.project.local_resources:
             self.resource_usage[res] = [0] * (max_duration_guess + 1)
+
+    def to_dict(self) -> dict:
+        return {
+            "priority_order": self.priority_order,
+            "start_times": self.start_times,
+            "total_duration": self.total_duration,
+            "robustness": self.robustness,
+            "global_resources_request": self.global_resources_request,
+            "project": self.project.to_dict(),  # 使用Project的序列化方法
+        }
 
     # === 计算最大共享资源需求 ===
     def _calculate_max_global_resources_request(self) -> None:
@@ -226,13 +233,6 @@ class Schedule:
 
         return delta_max
 
-    def _find_virtual_activity(self) -> int:
-        """识别虚活动（没有后继活动的活动）"""
-        for act in self.project.activities.values():
-            if not act.successors:
-                return act.activity_id
-        return max(self.project.activities.keys())  # 默认取最大ID
-
     def calculate_max_path_length(self, activity: Activity) -> int:
         """动态规划计算到虚活动的最大路径长度"""
         if activity.activity_id in self.path_length_cache:
@@ -280,12 +280,21 @@ class Individual:
         self.project = deepcopy(project)  # 项目副本（避免修改原始项目）
         self.mutation_rate = config["algorithm"]["mutation_probability"]  # 变异概率
         self.chromosome = chromosome or self._generate_constrained_chromosome()  # 染色体编码（活动优先级顺序）
-        self.schedule: Optional[Schedule] = None
+        self.schedule: [Schedule] = None
         self.fitness: Optional[float, float] = None  # (工期, -鲁棒性)
         self.rank = None  # 非支配等级（第几层）
         self.crowding_distance = 0.0  # 拥挤度
 
         self._init_schedule()  # 初始化调度并计算适应度
+
+    def to_dict(self) -> dict:
+        return {
+            "chromosome": self.chromosome,
+            "fitness": self.fitness,
+            "schedule": self.schedule.to_dict() if self.schedule else None,
+            "rank": self.rank,
+            "crowding_distance": self.crowding_distance
+        }
 
     def _init_schedule(self) -> None:
         """初始化调度并计算适应度"""

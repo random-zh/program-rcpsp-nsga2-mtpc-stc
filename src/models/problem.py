@@ -52,6 +52,15 @@ class Activity(object):
         # === 紧前活动需通过方法动态添加 ===
         self.predecessors: List[int] = []
 
+    def to_dict(self) -> dict:
+        return {
+            "activity_id": self.activity_id,
+            "duration": self.duration,
+            "resource_request": self.resource_request,
+            "predecessors": self.predecessors,
+            "successors": self.successors
+        }
+
 
 @dataclass  # 使用dataclass装饰器，自动添加__init__方法
 class Project:
@@ -66,8 +75,8 @@ class Project:
 
     # === 动态属性（初始化后由方法填充） ===
     activities: Dict[int, Activity] = None  # 活动字典 {activity_id: Activity}
-    total_duration: Optional[int] = None  # 项目总工期（调度后更新）
-    shared_resources_request: Dict[str, int] = None  # 共享资源需求（如 {"machine": 2}）
+    # total_duration: Optional[int] = None  # 项目总工期（调度后更新）
+    # shared_resources_request: Dict[str, int] = None  # 共享资源需求（如 {"machine": 2}）
     start_time: Optional[int] = None  # 新增：项目的基准开始时间
     weight: int = 1  # 新增：项目的权重
 
@@ -77,6 +86,17 @@ class Project:
             raise TypeError("项目ID必须为字符串或整数")
         if self.activities is None:
             self.activities = {}
+
+    def to_dict(self) -> dict:
+        return {
+            "project_id": self.project_id,
+            "local_resources": self.local_resources,
+            "successors": self.successors,
+            "predecessors": self.predecessors,
+            "activities": {aid: act.to_dict() for aid, act in self.activities.items()},
+            "start_time": self.start_time,
+            "weight": self.weight
+        }
 
     # === 方法定义 ===
 
