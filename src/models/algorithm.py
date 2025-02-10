@@ -475,7 +475,7 @@ class NSGA2Algorithm:
         self.crossover_prob = config["algorithm"]["crossover_probability"]
 
         self.history_knee_points = []  # 记录每次迭代的Knee点
-        self.best_knee = None  # 全局最优Knee点
+        self.best_knee: Optional[Individual] = None  # 全局最优Knee点
         self.fronts = None  # 最终的非支配层级结果
 
         # 初始化种群
@@ -530,8 +530,6 @@ class NSGA2Algorithm:
 
             # 记录knee迭代信息
             self._update_iteration_stats(gen)
-
-        # 最终处理迭代完成后的信息
 
         # 选择最优Knee点
         front0 = [ind for ind in self.population if ind.rank == 0]

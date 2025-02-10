@@ -5,7 +5,7 @@ import csv
 import logging
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Any
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -91,7 +91,7 @@ class ProjectOptimizer:
 
         return project
 
-    def run_nsga_for_project(self, project: Project, output_dir: Path) -> Dict:
+    def run_nsga_for_project(self, project: Project, output_dir: Path) -> str:
         """执行NSGA-II优化并记录数据"""
         os.makedirs(output_dir, exist_ok=True)
 
@@ -111,14 +111,9 @@ class ProjectOptimizer:
         self.save_pareto_front(nsga.fronts, nsga.best_knee, output_dir)
 
         # 得到最终调度
-        finnal_schedule = nsga.best_knee.schedule
+        finnal_schedule = nsga.best_knee.schedule.to_dict()
 
-        return {
-            "makespan": nsga.best_knee.schedule.total_duration,
-            "robustness": nsga.best_knee.schedule.robustness,
-            "iterations": len(nsga.history_knee_points),
-            "global_resources":6,
-        }
+        return finnal_schedule
 
     def save_iteration_data(self, history: List[Dict], output_dir: Path):
         """保存迭代过程数据到CSV"""
@@ -173,16 +168,29 @@ def run_res_for_project():
     final_report = []
 
     for sm_file in sm_files:
-        # 为每个项目创建子目录
-        project_dir = Path(res_dir) / sm_file.stem
+        # 提取 sm_file 的父目录名称（如 j30 或 j60）
+        project_subdir = sm_file.parent.stem  # 例如，"j30"
+
+        # 创建子目录，例如 res_dir/j30
+        project_dir = Path(res_dir) / project_subdir
         os.makedirs(project_dir, exist_ok=True)
 
         # 处理项目
-        result = optimizer.process_sm_file(sm_file, project_dir)
+        result: Dict = optimizer.process_sm_file(sm_file, project_dir)
 
         if result:
             final_report.append(result)
             logging.info(f"Completed {sm_file.stem}")
+
+            # 输出单个文件结果为json文件
+            # 创建 JSON 文件路径，例如 res_dir/j30/j3010_1.json
+            json_file_path = project_dir / f"{sm_file.stem}.json"
+
+            with open(json_file_path, 'w') as f:
+                json.dump(result, f, indent=2)
+
+        else:
+            raise ValueError(f"Failed to process {sm_file.stem}")
 
     # 保存总报告
     with open(Path(res_dir) / "final_report.json", 'w') as f:
