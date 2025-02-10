@@ -391,30 +391,35 @@ class Individual:
 
 def _non_dominated_sort(population: List[Individual]) -> List[List[Individual]]:
     """高效非支配排序 O(MN^2)"""
-    fronts = [[]]
-    domination_counts = defaultdict(int)
-    dominated_inds = defaultdict(list)
+    n = len(population)
+    fronts = [[]]  # 存储各前沿层的个体对象
+    domination_counts = [0] * n  # 每个个体被支配的次数（使用索引）
+    dominated_map = defaultdict(list)  # 键: 个体索引, 值: 被其支配的个体索引列表
 
-    # 第一轮支配关系比较
-    for i, ind_i in enumerate(population):
-        for j, ind_j in enumerate(population):
+    # === 步骤1: 构建支配关系 ===
+    for i in range(n):
+        for j in range(n):
             if i == j:
                 continue
-            if ind_i.dominates(ind_j):
-                dominated_inds[i].append(j)
-            elif ind_j.dominates(ind_i):
+            # 判断支配关系
+            if population[i].dominates(population[j]):
+                dominated_map[i].append(j)
+            elif population[j].dominates(population[i]):
                 domination_counts[i] += 1
 
+        # 第一前沿层（无被支配的个体）
         if domination_counts[i] == 0:
-            ind_i.rank = 0
-            fronts[0].append(ind_i)
+            population[i].rank = 0
+            fronts[0].append(population[i])
 
-    # 分层处理其他前沿
+    # === 步骤2: 分层处理 ===
     current_front = 0
     while fronts[current_front]:
         next_front = []
+        # 遍历当前前沿层的个体索引（注意：这里用个体对象反向找索引）
         for ind in fronts[current_front]:
-            for dominated_idx in dominated_inds[ind]:
+            idx = population.index(ind)  # 获取个体在population中的索引
+            for dominated_idx in dominated_map[idx]:
                 domination_counts[dominated_idx] -= 1
                 if domination_counts[dominated_idx] == 0:
                     population[dominated_idx].rank = current_front + 1
