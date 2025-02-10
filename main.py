@@ -63,11 +63,11 @@ class ProjectOptimizer:
                         dataset_files.append(Path(root) / file)
 
             if dataset == "j30":
-                # 随机选择40个文件
-                num_to_select = 50
+                # 随机选择X个文件
+                num_to_select = config["file"]["j30_fil_num"]
             else:
-                # 随机选择20个文件
-                num_to_select = 30
+                # 随机选择X个文件
+                num_to_select = config["file"]["j60_fil_num"]
 
             # 检查文件数量
             if num_to_select > len(dataset_files):

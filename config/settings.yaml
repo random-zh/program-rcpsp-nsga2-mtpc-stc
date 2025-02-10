@@ -15,3 +15,7 @@ project:
   log_level: "INFO"
   seed: 42
   resource_overflow_penalty: 1e6
+
+file:
+  j30_fil_num: 50
+  j60_fil_num: 20
