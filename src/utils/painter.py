@@ -1,4 +1,6 @@
 # utils/painter.py
+import matplotlib
+matplotlib.use('TkAgg')  # 显式设置后端
 from models.algorithm import Individual
 import matplotlib.pyplot as plt
 from typing import List, Dict

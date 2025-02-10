@@ -8,6 +8,7 @@ from typing import Dict, List, Optional, Tuple, Any, Set
 from .problem import Project, Activity, Program
 from utils.config_loader import config
 from gurobipy import Model, GRB, quicksum
+from tqdm import trange
 
 
 class Schedule:
@@ -474,7 +475,7 @@ class NSGA2Algorithm:
         self.max_generations = config["algorithm"]["generations"]
         self.crossover_prob = config["algorithm"]["crossover_probability"]
 
-        self.history_knee_points = []  # 记录每次迭代的Knee点
+        self.history_best_points = []  # 记录每次迭代的最值点
         self.best_knee: Optional[Individual] = None  # 全局最优Knee点
         self.fronts = None  # 最终的非支配层级结果
 
@@ -489,7 +490,8 @@ class NSGA2Algorithm:
         """执行进化循环"""
         # 步骤1: 初始化种群 (已通过构造函数完成)
         # 步骤2: 目标函数计算 (已在个体初始化时完成)
-        for gen in range(self.max_generations):
+        for gen in trange(self.max_generations, desc="NSGA2 Progress", unit="gen", leave=False, position=0,
+                          dynamic_ncols=True):
             # 步骤3: 非支配排序
             fronts = _non_dominated_sort(self.population)
 
@@ -543,13 +545,14 @@ class NSGA2Algorithm:
         """记录迭代统计信息"""
         front0 = [ind for ind in self.population if ind.rank == 0]
         if front0:
-            knee_point = self._select_knee_point(front0)
-            self.history_knee_points.append({
+            # 计算每个目标的最小值
+            min_makespan = min(ind.objectives[0] for ind in front0)
+            min_robustness = min(ind.objectives[1] for ind in front0)
+            self.history_best_points.append({
                 "generation": gen,
-                "makespan": knee_point.objectives[0],
-                "robustness": -knee_point.objectives[1],
-                "front_size": len(front0),
-                "avg_crowding": np.mean([ind.crowding_distance for ind in front0])
+                "makespan": min_makespan,
+                "robustness": -min_robustness,
+                "front_size": len(front0)
             })
 
     def _calculate_crowding_distance(self, front: List[Individual]) -> None:
@@ -684,17 +687,6 @@ class NSGA2Algorithm:
 
         # 选择MMD最小的个体
         return front[normalized.index(min(normalized))]
-
-    def _print_final_knee_info(self) -> None:
-        """输出最优Knee点的调度详情"""
-        best_schedule = self.best_knee.schedule
-        print("\n=== 最优Knee点解 ===")
-        print(f"总工期: {best_schedule.total_duration}")
-        print(f"鲁棒性: {best_schedule.robustness:.2f}")
-        print("共享资源需求:")
-        for proj_id, proj in self.best_knee.project.projects.items():
-            shared_res = proj.shared_resources_request
-            print(f"  项目 {proj_id}: {shared_res}")
 
 
 class GurobiAlgorithm:
