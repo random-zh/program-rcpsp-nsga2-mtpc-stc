@@ -1,4 +1,4 @@
-# main.py
+# main-project.py
 import os
 import json
 import csv
@@ -188,7 +188,7 @@ def run_res_for_project():
 
     final_report = []
 
-    for sm_file in sm_files:
+    for idx, sm_file in enumerate(tqdm(sm_files, desc="Processing Files", leave=True)):
         # 为每个项目创建子目录
         project_dir = Path(res_dir) / sm_file.stem
         os.makedirs(project_dir, exist_ok=True)

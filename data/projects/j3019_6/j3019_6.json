@@ -1,0 +1,660 @@
+{
+  "project_id": "j3019_6",
+  "activities": 32,
+  "resources": {
+    "R1": 999999,
+    "R2": 12,
+    "R3": 15,
+    "R4": 18
+  },
+  "optimization": {
+    "priority_order": {
+      "1": 1,
+      "2": 2,
+      "4": 3,
+      "3": 4,
+      "5": 5,
+      "7": 6,
+      "9": 7,
+      "12": 8,
+      "13": 9,
+      "6": 10,
+      "20": 11,
+      "17": 12,
+      "10": 13,
+      "11": 14,
+      "21": 15,
+      "15": 16,
+      "23": 17,
+      "18": 18,
+      "16": 19,
+      "14": 20,
+      "19": 21,
+      "24": 22,
+      "22": 23,
+      "28": 24,
+      "8": 25,
+      "27": 26,
+      "25": 27,
+      "26": 28,
+      "30": 29,
+      "29": 30,
+      "31": 31,
+      "32": 32
+    },
+    "start_times": {
+      "1": 0,
+      "2": 0,
+      "4": 0,
+      "3": 0,
+      "5": 3,
+      "7": 3,
+      "9": 13,
+      "12": 13,
+      "13": 2,
+      "6": 13,
+      "20": 23,
+      "17": 16,
+      "10": 5,
+      "11": 8,
+      "21": 3,
+      "15": 11,
+      "23": 18,
+      "18": 16,
+      "16": 23,
+      "14": 22,
+      "19": 24,
+      "24": 23,
+      "22": 18,
+      "28": 31,
+      "8": 26,
+      "27": 24,
+      "25": 28,
+      "26": 31,
+      "30": 38,
+      "29": 36,
+      "31": 38,
+      "32": 46
+    },
+    "total_duration": 46,
+    "robustness": 31.277531145419513,
+    "global_resources_request": 15,
+    "project": {
+      "project_id": "temp",
+      "local_resources": {
+        "R1": 999999,
+        "R2": 12,
+        "R3": 15,
+        "R4": 18
+      },
+      "successors": [],
+      "predecessors": [],
+      "activities": {
+        "1": {
+          "activity_id": 1,
+          "duration": 0,
+          "resource_request": {
+            "R1": 0,
+            "R2": 0,
+            "R3": 0,
+            "R4": 0
+          },
+          "predecessors": [],
+          "successors": [
+            2,
+            3,
+            4
+          ]
+        },
+        "2": {
+          "activity_id": 2,
+          "duration": 2,
+          "resource_request": {
+            "R1": 7,
+            "R2": 0,
+            "R3": 0,
+            "R4": 0
+          },
+          "predecessors": [
+            1
+          ],
+          "successors": [
+            13,
+            28
+          ]
+        },
+        "3": {
+          "activity_id": 3,
+          "duration": 1,
+          "resource_request": {
+            "R1": 6,
+            "R2": 0,
+            "R3": 0,
+            "R4": 0
+          },
+          "predecessors": [
+            1
+          ],
+          "successors": [
+            10
+          ]
+        },
+        "4": {
+          "activity_id": 4,
+          "duration": 3,
+          "resource_request": {
+            "R1": 0,
+            "R2": 1,
+            "R3": 0,
+            "R4": 0
+          },
+          "predecessors": [
+            1
+          ],
+          "successors": [
+            5,
+            7,
+            21
+          ]
+        },
+        "5": {
+          "activity_id": 5,
+          "duration": 10,
+          "resource_request": {
+            "R1": 0,
+            "R2": 0,
+            "R3": 4,
+            "R4": 0
+          },
+          "predecessors": [
+            4
+          ],
+          "successors": [
+            6,
+            9,
+            12
+          ]
+        },
+        "6": {
+          "activity_id": 6,
+          "duration": 10,
+          "resource_request": {
+            "R1": 0,
+            "R2": 0,
+            "R3": 0,
+            "R4": 4
+          },
+          "predecessors": [
+            5
+          ],
+          "successors": [
+            8,
+            16,
+            20
+          ]
+        },
+        "7": {
+          "activity_id": 7,
+          "duration": 2,
+          "resource_request": {
+            "R1": 0,
+            "R2": 0,
+            "R3": 0,
+            "R4": 3
+          },
+          "predecessors": [
+            4
+          ],
+          "successors": [
+            9,
+            10
+          ]
+        },
+        "8": {
+          "activity_id": 8,
+          "duration": 2,
+          "resource_request": {
+            "R1": 0,
+            "R2": 0,
+            "R3": 8,
+            "R4": 0
+          },
+          "predecessors": [
+            6
+          ],
+          "successors": [
+            25
+          ]
+        },
+        "9": {
+          "activity_id": 9,
+          "duration": 3,
+          "resource_request": {
+            "R1": 0,
+            "R2": 3,
+            "R3": 0,
+            "R4": 0
+          },
+          "predecessors": [
+            5,
+            7
+          ],
+          "successors": [
+            16,
+            17,
+            18
+          ]
+        },
+        "10": {
+          "activity_id": 10,
+          "duration": 3,
+          "resource_request": {
+            "R1": 0,
+            "R2": 0,
+            "R3": 0,
+            "R4": 8
+          },
+          "predecessors": [
+            3,
+            7
+          ],
+          "successors": [
+            11,
+            27
+          ]
+        },
+        "11": {
+          "activity_id": 11,
+          "duration": 3,
+          "resource_request": {
+            "R1": 2,
+            "R2": 0,
+            "R3": 0,
+            "R4": 0
+          },
+          "predecessors": [
+            10
+          ],
+          "successors": [
+            15,
+            22
+          ]
+        },
+        "12": {
+          "activity_id": 12,
+          "duration": 4,
+          "resource_request": {
+            "R1": 0,
+            "R2": 0,
+            "R3": 0,
+            "R4": 1
+          },
+          "predecessors": [
+            5
+          ],
+          "successors": [
+            14,
+            24
+          ]
+        },
+        "13": {
+          "activity_id": 13,
+          "duration": 8,
+          "resource_request": {
+            "R1": 0,
+            "R2": 8,
+            "R3": 0,
+            "R4": 0
+          },
+          "predecessors": [
+            2
+          ],
+          "successors": [
+            19,
+            22,
+            23
+          ]
+        },
+        "14": {
+          "activity_id": 14,
+          "duration": 2,
+          "resource_request": {
+            "R1": 0,
+            "R2": 0,
+            "R3": 0,
+            "R4": 8
+          },
+          "predecessors": [
+            12
+          ],
+          "successors": [
+            26,
+            27
+          ]
+        },
+        "15": {
+          "activity_id": 15,
+          "duration": 2,
+          "resource_request": {
+            "R1": 5,
+            "R2": 0,
+            "R3": 0,
+            "R4": 0
+          },
+          "predecessors": [
+            11
+          ],
+          "successors": [
+            18
+          ]
+        },
+        "16": {
+          "activity_id": 16,
+          "duration": 1,
+          "resource_request": {
+            "R1": 0,
+            "R2": 10,
+            "R3": 0,
+            "R4": 0
+          },
+          "predecessors": [
+            6,
+            9
+          ],
+          "successors": [
+            25,
+            27
+          ]
+        },
+        "17": {
+          "activity_id": 17,
+          "duration": 2,
+          "resource_request": {
+            "R1": 0,
+            "R2": 0,
+            "R3": 0,
+            "R4": 9
+          },
+          "predecessors": [
+            9
+          ],
+          "successors": [
+            19,
+            22,
+            23
+          ]
+        },
+        "18": {
+          "activity_id": 18,
+          "duration": 7,
+          "resource_request": {
+            "R1": 0,
+            "R2": 10,
+            "R3": 0,
+            "R4": 0
+          },
+          "predecessors": [
+            9,
+            15
+          ],
+          "successors": [
+            19,
+            24
+          ]
+        },
+        "19": {
+          "activity_id": 19,
+          "duration": 7,
+          "resource_request": {
+            "R1": 0,
+            "R2": 3,
+            "R3": 0,
+            "R4": 0
+          },
+          "predecessors": [
+            13,
+            17,
+            18
+          ],
+          "successors": [
+            31
+          ]
+        },
+        "20": {
+          "activity_id": 20,
+          "duration": 3,
+          "resource_request": {
+            "R1": 0,
+            "R2": 0,
+            "R3": 6,
+            "R4": 0
+          },
+          "predecessors": [
+            6
+          ],
+          "successors": [
+            25,
+            28
+          ]
+        },
+        "21": {
+          "activity_id": 21,
+          "duration": 3,
+          "resource_request": {
+            "R1": 0,
+            "R2": 3,
+            "R3": 0,
+            "R4": 0
+          },
+          "predecessors": [
+            4
+          ],
+          "successors": [
+            23,
+            24
+          ]
+        },
+        "22": {
+          "activity_id": 22,
+          "duration": 8,
+          "resource_request": {
+            "R1": 0,
+            "R2": 0,
+            "R3": 4,
+            "R4": 0
+          },
+          "predecessors": [
+            11,
+            13,
+            17
+          ],
+          "successors": [
+            26
+          ]
+        },
+        "23": {
+          "activity_id": 23,
+          "duration": 4,
+          "resource_request": {
+            "R1": 0,
+            "R2": 0,
+            "R3": 0,
+            "R4": 9
+          },
+          "predecessors": [
+            13,
+            17,
+            21
+          ],
+          "successors": [
+            29
+          ]
+        },
+        "24": {
+          "activity_id": 24,
+          "duration": 8,
+          "resource_request": {
+            "R1": 0,
+            "R2": 0,
+            "R3": 0,
+            "R4": 1
+          },
+          "predecessors": [
+            12,
+            18,
+            21
+          ],
+          "successors": [
+            26,
+            28
+          ]
+        },
+        "25": {
+          "activity_id": 25,
+          "duration": 10,
+          "resource_request": {
+            "R1": 10,
+            "R2": 0,
+            "R3": 0,
+            "R4": 0
+          },
+          "predecessors": [
+            8,
+            16,
+            20
+          ],
+          "successors": [
+            30,
+            31
+          ]
+        },
+        "26": {
+          "activity_id": 26,
+          "duration": 5,
+          "resource_request": {
+            "R1": 0,
+            "R2": 4,
+            "R3": 0,
+            "R4": 0
+          },
+          "predecessors": [
+            14,
+            22,
+            24
+          ],
+          "successors": [
+            31
+          ]
+        },
+        "27": {
+          "activity_id": 27,
+          "duration": 3,
+          "resource_request": {
+            "R1": 0,
+            "R2": 0,
+            "R3": 0,
+            "R4": 10
+          },
+          "predecessors": [
+            10,
+            14,
+            16
+          ],
+          "successors": [
+            29
+          ]
+        },
+        "28": {
+          "activity_id": 28,
+          "duration": 5,
+          "resource_request": {
+            "R1": 5,
+            "R2": 0,
+            "R3": 0,
+            "R4": 0
+          },
+          "predecessors": [
+            2,
+            20,
+            24
+          ],
+          "successors": [
+            29,
+            30
+          ]
+        },
+        "29": {
+          "activity_id": 29,
+          "duration": 6,
+          "resource_request": {
+            "R1": 1,
+            "R2": 0,
+            "R3": 0,
+            "R4": 0
+          },
+          "predecessors": [
+            23,
+            27,
+            28
+          ],
+          "successors": [
+            32
+          ]
+        },
+        "30": {
+          "activity_id": 30,
+          "duration": 8,
+          "resource_request": {
+            "R1": 0,
+            "R2": 0,
+            "R3": 3,
+            "R4": 0
+          },
+          "predecessors": [
+            25,
+            28
+          ],
+          "successors": [
+            32
+          ]
+        },
+        "31": {
+          "activity_id": 31,
+          "duration": 1,
+          "resource_request": {
+            "R1": 6,
+            "R2": 0,
+            "R3": 0,
+            "R4": 0
+          },
+          "predecessors": [
+            19,
+            25,
+            26
+          ],
+          "successors": [
+            32
+          ]
+        },
+        "32": {
+          "activity_id": 32,
+          "duration": 0,
+          "resource_request": {
+            "R1": 0,
+            "R2": 0,
+            "R3": 0,
+            "R4": 0
+          },
+          "predecessors": [
+            29,
+            30,
+            31
+          ],
+          "successors": []
+        }
+      },
+      "start_time": null,
+      "weight": 1
+    }
+  }
+}
