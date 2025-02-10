@@ -595,6 +595,8 @@ class NSGA2Algorithm:
             # 2. 同层级选择高拥挤度
             winner = min(candidates, key=lambda x: (x.rank, -x.crowding_distance))
             parents.append(deepcopy(winner))
+            # TODO: 优化选择策略
+            # parents.append(Individual(self.project, winner.chromosome))
 
         return parents
 

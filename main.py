@@ -168,11 +168,8 @@ def run_res_for_project():
     final_report = []
 
     for sm_file in sm_files:
-        # 提取 sm_file 的父目录名称（如 j30 或 j60）
-        project_subdir = sm_file.parent.stem  # 例如，"j30"
-
-        # 创建子目录，例如 res_dir/j30
-        project_dir = Path(res_dir) / project_subdir
+        # 为每个项目创建子目录
+        project_dir = Path(res_dir) / sm_file.stem
         os.makedirs(project_dir, exist_ok=True)
 
         # 处理项目
@@ -183,11 +180,9 @@ def run_res_for_project():
             logging.info(f"Completed {sm_file.stem}")
 
             # 输出单个文件结果为json文件
-            # 创建 JSON 文件路径，例如 res_dir/j30/j3010_1.json
             json_file_path = project_dir / f"{sm_file.stem}.json"
-
             with open(json_file_path, 'w') as f:
-                json.dump(result, f, indent=2)
+                json.dump(result, f, indent=4)
 
         else:
             raise ValueError(f"Failed to process {sm_file.stem}")
