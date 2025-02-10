@@ -166,3 +166,53 @@ class ProgramVisualizer:
         # 保存高清图像
         plt.savefig(save_path, dpi=300, bbox_inches='tight')
         plt.close()
+
+    @staticmethod
+    def plot_resource_network(program: Program, resource_arcs: set, save_path: str):
+        """绘制资源流网络图"""
+        plt.figure(figsize=(12, 8))
+
+        # 绘制项目节点
+        projects = sorted(program.projects.values(), key=lambda p: p.start_time)
+        for i, proj in enumerate(projects):
+            plt.scatter(proj.start_time, i, s=200, label=f"Proj {proj.project_id}")
+
+        # 绘制资源弧
+        for arc in resource_arcs:
+            src = next(p for p in projects if p.project_id == arc[0])
+            dest = next(p for p in projects if p.project_id == arc[1])
+            plt.plot([src.start_time + src.total_duration, dest.start_time],
+                     [projects.index(src), projects.index(dest)],
+                     'gray', alpha=0.5)
+
+        plt.xlabel("Time")
+        plt.ylabel("Project Sequence")
+        plt.title("Resource Flow Network")
+        plt.legend(loc='upper right')
+        plt.savefig(save_path)
+        plt.close()
+
+    @staticmethod
+    def plot_gantt_comparison(original: Program, buffered: Program, save_path: str):
+        """绘制缓冲前后甘特图对比"""
+        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(14, 8), sharex=True)
+
+        # 原始计划
+        for proj in original.projects.values():
+            ax1.barh(proj.project_id, proj.total_duration,
+                     left=proj.start_time, alpha=0.6)
+        ax1.set_title("Original Schedule")
+
+        # 缓冲后计划
+        for proj in buffered.projects.values():
+            ax2.barh(proj.project_id, proj.total_duration,
+                     left=proj.start_time, alpha=0.6)
+            # 标记缓冲
+            if proj.project_id in buffered.buffers_added:
+                ax2.text(proj.start_time, proj.project_id, "Buffer",
+                         color='red', va='center')
+        ax2.set_title("Schedule with Buffers")
+
+        plt.tight_layout()
+        plt.savefig(save_path)
+        plt.close()
