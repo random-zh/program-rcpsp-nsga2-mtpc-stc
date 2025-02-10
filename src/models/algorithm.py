@@ -264,6 +264,8 @@ class Individual:
         self.chromosome = chromosome or self._generate_constrained_chromosome()  # 染色体编码（活动优先级顺序）
         self.schedule: Optional[Schedule] = None
         self.fitness: Optional[float, float] = None  # (工期, -鲁棒性)
+        self.rank = None          # 非支配等级（第几层）
+        self.crowding_distance = 0.0  # 拥挤度
 
         self._init_schedule()  # 初始化调度并计算适应度
 
@@ -288,11 +290,21 @@ class Individual:
         """获取目标值（工期, -鲁棒性）"""
         return self.fitness
 
-    # === 个体支配关系比较 ===
-    def __lt__(self, other: 'Individual') -> bool:
-        """定义支配关系比较"""
-        return (self.fitness[0] <= other.fitness[0]) and (self.fitness[1] <= other.fitness[1]) \
-               and (self.fitness[0] < other.fitness[0] or self.fitness[1] < other.fitness[1])
+    # === 新增支配关系判断方法 ===
+    def dominates(self, other: 'Individual') -> bool:
+        """判断当前个体是否支配另一个个体（目标为最小化）"""
+        obj_self = self.objectives
+        obj_other = other.objectives
+        return (obj_self[0] <= obj_other[0] and
+                obj_self[1] <= obj_other[1] and
+                (obj_self[0] < obj_other[0] or
+                 obj_self[1] < obj_other[1]))
+
+    # # === 个体支配关系比较 ===
+    # def __lt__(self, other: 'Individual') -> bool:
+    #     """定义支配关系比较"""
+    #     return (self.fitness[0] <= other.fitness[0]) and (self.fitness[1] <= other.fitness[1]) \
+    #            and (self.fitness[0] < other.fitness[0] or self.fitness[1] < other.fitness[1])
 
     def _generate_constrained_chromosome(self) -> List[int]:
         """
@@ -377,6 +389,42 @@ class Individual:
         self.chromosome = new_chromosome
 
 
+def _non_dominated_sort(population: List[Individual]) -> List[List[Individual]]:
+    """高效非支配排序 O(MN^2)"""
+    fronts = [[]]
+    domination_counts = defaultdict(int)
+    dominated_inds = defaultdict(list)
+
+    # 第一轮支配关系比较
+    for i, ind_i in enumerate(population):
+        for j, ind_j in enumerate(population):
+            if i == j:
+                continue
+            if ind_i.dominates(ind_j):
+                dominated_inds[i].append(j)
+            elif ind_j.dominates(ind_i):
+                domination_counts[i] += 1
+
+        if domination_counts[i] == 0:
+            ind_i.rank = 0
+            fronts[0].append(ind_i)
+
+    # 分层处理其他前沿
+    current_front = 0
+    while fronts[current_front]:
+        next_front = []
+        for ind in fronts[current_front]:
+            for dominated_idx in dominated_inds[ind]:
+                domination_counts[dominated_idx] -= 1
+                if domination_counts[dominated_idx] == 0:
+                    population[dominated_idx].rank = current_front + 1
+                    next_front.append(population[dominated_idx])
+        if next_front:
+            fronts.append(next_front)
+            current_front += 1
+    return fronts
+
+
 class NSGA2Algorithm:
     """NSGA-II 算法核心类，支持多目标优化和精英保留策略"""
 
@@ -398,37 +446,145 @@ class NSGA2Algorithm:
         """初始化种群（随机生成个体）"""
         self.population = [Individual(self.project) for _ in range(self.pop_size)]
 
-    def _non_dominated_sort(self, individuals: List[Individual]) -> List[List[int]]:
-        """非支配排序"""
-        objectives = np.array([ind.objectives for ind in individuals])
-        return NonDominatedSorting().do(objectives)
+    def evolve(self) -> None:
+        """执行进化循环"""
+        # 步骤1: 初始化种群 (已通过构造函数完成)
+        # 步骤2: 目标函数计算 (已在个体初始化时完成)
+        for gen in range(self.max_generations):
+            # 步骤3: 非支配排序
+            fronts = _non_dominated_sort(self.population)
+
+            # 步骤4: 拥挤度计算
+            for front in fronts:
+                self._calculate_crowding_distance(front)
+
+            # 步骤5: 父代选择
+            selected_parents = self._select_parents(fronts)
+
+            # 步骤6: 生成子代
+            offspring = self._generate_offspring(selected_parents)
+
+            # 步骤7: 合并种群
+            combined_population = self.population + offspring
+
+            # 步骤8: 环境选择
+            # 步骤8.1: 重新非支配排序
+            combined_fronts = _non_dominated_sort(combined_population)
+
+            # 步骤8.2: 构建新一代种群
+            new_population = []
+            remaining = self.pop_size
+            for front in combined_fronts:
+                # 计算当前前沿的拥挤度
+                self._calculate_crowding_distance(front)
+
+                if len(front) <= remaining:
+                    new_population.extend(front)
+                    remaining -= len(front)
+                else:
+                    # 按拥挤度排序选择
+                    front_sorted = sorted(front, key=lambda x: x.crowding_distance, reverse=True)
+                    new_population.extend(front_sorted[:remaining])
+                    break
+
+            self.population = new_population
+
+            # 记录knee迭代信息
+            self._update_iteration_stats(gen)
+
+        # 最终处理迭代完成后的信息
+        self._final_selection()
+
+    def _update_iteration_stats(self, gen: int) -> None:
+        """记录迭代统计信息"""
+        front0 = [ind for ind in self.population if ind.rank == 0]
+        if front0:
+            knee_point = self._select_knee_point(front0)
+            self.history_knee_points.append({
+                "generation": gen,
+                "makespan": knee_point.objectives[0],
+                "robustness": -knee_point.objectives[1],
+                "front_size": len(front0),
+                "avg_crowding": np.mean([ind.crowding_distance for ind in front0])
+            })
+
+    def _final_selection(self) -> None:
+        """最终选择最优解"""
+        front0 = [ind for ind in self.population if ind.rank == 0]
+        if front0:
+            self.best_knee = self._select_knee_point(front0)
+            self._update_project_with_knee_solution()
 
     @staticmethod
-    def _crowding_distance(front: List[Individual]) -> List[float]:
-        """拥挤度计算"""
+    def _calculate_crowding_distance(self, front: List[Individual]) -> None:
+        """改进的拥挤度计算（直接修改个体属性）"""
+
         num_objs = len(front[0].objectives)
-        distances = [0.0] * len(front)
+
+        # 初始化拥挤度
+        for ind in front:
+            ind.crowding_distance = 0.0
 
         for obj_idx in range(num_objs):
             # 按目标值排序
-            sorted_front = sorted(front, key=lambda x: x.objectives[obj_idx])
-            min_obj = sorted_front[0].objectives[obj_idx]
-            max_obj = sorted_front[-1].objectives[obj_idx]
+            front_sorted = sorted(front, key=lambda x: x.objectives[obj_idx])
+            min_obj = front_sorted[0].objectives[obj_idx]
+            max_obj = front_sorted[-1].objectives[obj_idx]
 
-            # 边界个体拥挤度设为无穷大
-            distances[0] = distances[-1] = np.inf
-            for i in range(1, len(front) - 1):
-                if max_obj - min_obj == 0:
-                    continue
-                distances[i] += (sorted_front[i + 1].objectives[obj_idx] -
-                                 sorted_front[i - 1].objectives[obj_idx]) / (max_obj - min_obj)
-        return distances
+            # 处理边界情况
+            if max_obj - min_obj < 1e-6:
+                continue
+
+            # 设置边界个体的拥挤度
+            front_sorted[0].crowding_distance = float('inf')
+            front_sorted[-1].crowding_distance = float('inf')
+
+            # 计算中间个体的拥挤度
+            for i in range(1, len(front_sorted) - 1):
+                delta = (front_sorted[i + 1].objectives[obj_idx] -
+                         front_sorted[i - 1].objectives[obj_idx]) / (max_obj - min_obj)
+                front_sorted[i].crowding_distance += delta
 
     @staticmethod
-    def _tournament_selection(population: List[Individual], k: int = 2) -> Individual:
+    def _select_parents(self, fronts: List[List[Individual]]) -> List[Individual]:
         """二元锦标赛选择"""
-        candidates = random.sample(population, k)
-        return min(candidates, key=lambda x: x.fitness)
+        parents = []
+        tournament_size = 2
+
+        while len(parents) < self.pop_size:
+            # 从整个种群中选择候选者
+            candidates = random.sample(self.population, tournament_size)
+
+            # 选择规则:
+            # 1. 优先低非支配层级
+            # 2. 同层级选择高拥挤度
+            winner = min(candidates, key=lambda x: (x.rank, -x.crowding_distance))
+            parents.append(deepcopy(winner))
+
+        return parents
+
+    def _generate_offspring(self, parents: List[Individual]) -> List[Individual]:
+        """交叉变异生成子代"""
+        offspring = []
+
+        for i in range(0, len(parents), 2):
+            if i + 1 >= len(parents):
+                break  # 处理奇数情况
+
+            parent1 = parents[i]
+            parent2 = parents[i + 1]
+
+            # 交叉操作
+            daughter, son = self._crossover(parent1, parent2)
+
+            # 变异操作
+            daughter.mutate()
+            son.mutate()
+
+            offspring.append(daughter)
+            offspring.append(son)
+
+        return offspring
 
     def _crossover(self, parent1: Individual, parent2: Individual) -> Tuple[Individual, Individual]:
         """执行交叉操作（按概率）"""
@@ -472,66 +628,9 @@ class NSGA2Algorithm:
 
         return daughter, son
 
-    def evolve(self) -> None:
-        """执行进化循环"""
-        for gen in range(self.max_generations):
-            # 1. 生成子代种群
-            offspring = []
-            while len(offspring) < self.pop_size:
-                # 选择父代
-                parent1 = self._tournament_selection(self.population)
-                parent2 = self._tournament_selection(self.population)
-                # 交叉和变异
-                daughter, son = self._crossover(parent1, parent2)
-                # 变异并添加到子代种群
-                daughter.mutate()
-                son.mutate()
-                offspring.extend([daughter, son])
-
-            # 2. 合并父代和子代
-            combined = self.population + offspring
-
-            # 3. 非支配排序和拥挤度计算
-            fronts = self._non_dominated_sort(combined)
-            next_population = []
-            front_idx = 0
-            while len(next_population) + len(fronts[front_idx]) <= self.pop_size:
-                next_population += [combined[i] for i in fronts[front_idx]]
-                front_idx += 1
-
-            # 4. 填充剩余位置（按拥挤度）
-            if len(next_population) < self.pop_size:
-                last_front = [combined[i] for i in fronts[front_idx]]
-                crowding_dist = self._crowding_distance(last_front)
-                sorted_indices = sorted(
-                    range(len(last_front)),
-                    key=lambda x: crowding_dist[x],
-                    reverse=True
-                )
-                needed = self.pop_size - len(next_population)
-                next_population += [last_front[i] for i in sorted_indices[:needed]]
-
-            self.population = next_population
-
-            # === 新增：计算当前代的帕累托前沿并更新Knee点 ===
-            current_front = self._get_current_pareto_front()
-            current_knee = self._select_knee_point(current_front)
-            self._update_best_knee(current_knee)
-            self.history_knee_points.append({
-                "generation": gen,
-                "makespan": current_knee.objectives[0],
-                "robustness": -current_knee.objectives[1],
-                "solution": current_knee
-            })
-
-        # 最终输出最优Knee点
-        self._print_final_knee_info()
-        # 迭代结束后，将最优Knee点的共享资源需求注入Project
-        self._update_project_with_knee_solution()
-
     def _get_current_pareto_front(self) -> List[Individual]:
         """获取当前代的帕累托前沿第一层"""
-        fronts = self._non_dominated_sort(self.population)
+        fronts = _non_dominated_sort(self.population)
         return [self.population[i] for i in fronts[0]]
 
     def _select_knee_point(self, front: List[Individual]) -> Individual:
