@@ -717,6 +717,7 @@ class GurobiAlgorithm:
         T = self._calculate_upper_bound()  # 总工期上界（各项目工期之和）
 
         # 变量1：项目开始时间（整数变量）
+        # x jt 表示项目 j 在时间 t 开始
         start_vars = self.model.addVars(
             projects.keys(), lb=0, ub=T, vtype=GRB.INTEGER, name="start"
         )

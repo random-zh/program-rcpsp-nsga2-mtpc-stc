@@ -5,7 +5,7 @@ from pathlib import Path
 from datetime import datetime
 import matplotlib.pyplot as plt
 
-from utils.ProjectReader import ProjectReader
+from utils.Projectreader import ProjectReader
 from utils.painter import ProgramVisualizer
 from models.algorithm import GurobiAlgorithm, MTPCAlgorithm, STCAlgorithm
 
