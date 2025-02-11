@@ -73,7 +73,7 @@ class ProgramVisualizer:
             for proj in program.projects.values():
                 start = proj.start_time
                 end = start + proj.total_duration
-                demand = proj.shared_resources_request.get(res, 0)
+                demand = proj.global_resources_request.get(res, 0)
                 for t in range(start, min(end, time_points)):
                     res_usage[t] += demand
             usage_data.append(res_usage)
@@ -106,7 +106,7 @@ class ProgramVisualizer:
                 width=proj.total_duration,
                 left=proj.start_time,
                 height=0.6,
-                label=f"{proj.project_id} (R: {proj.shared_resources_request})",
+                label=f"{proj.project_id} (R: {proj.global_resources_request})",
                 alpha=0.7
             )
 
@@ -115,7 +115,7 @@ class ProgramVisualizer:
             ax.text(
                 x=proj.start_time + 0.1,
                 y=idx - 0.2,
-                s=f"{proj.shared_resources_request}",
+                s=f"{proj.global_resources_request}",
                 fontsize=8,
                 va='top'
             )

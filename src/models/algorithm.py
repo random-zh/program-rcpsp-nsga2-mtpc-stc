@@ -395,7 +395,7 @@ class Individual:
             ) if act.successors else n - 1
 
             # 修正可行区域为 [left, right]
-            feasible_region = list(range(left+1, right))
+            feasible_region = list(range(left + 1, right))
             # 移除当前位置
             if i in feasible_region:
                 feasible_region.remove(i)
@@ -700,100 +700,264 @@ class NSGA2Algorithm:
         return front[normalized.index(min(normalized))]
 
 
-class GurobiAlgorithm:
-    """使用Gurobi求解项目群精确调度方案"""
+# ------------------------------------------------------------------------------------------------
+# 以下为其他算法实现
+#
+#
+#
+#
+#
+#
+#
+# ------------------------------------------------------------------------------------------------
 
-    def __init__(self, program: Program):
+
+class GurobiAlgorithm:
+    """使用Gurobi求解RCPSP问题"""
+
+    def __init__(self, program):
         self.program = program
-        self.model = Model("ProgramScheduling")
+        self.model = Model("RCPSP_Solver")
         self.project_vars = {}  # 项目开始时间变量
-        self.resource_usage = {}  # 新增：资源占用变量
+        self.x = {}  # 时间周期变量
 
         # 从配置获取全局资源限制
         self.global_res_limits = program.global_resources
+        self.resource_usage = {}  # 资源使用记录
 
     def solve(self) -> Dict:
         """求解并返回调度方案"""
-        self._add_decision_variables()
-        self._add_dependency_constraints()
-        self._add_resource_constraints()
+        # max_makespan = sum(p.total_duration for p in self.program.projects.values())
+        # self._add_time_variables(max_makespan)
+        # self._add_dependency_constraints(max_makespan)
+        # self._add_resource_constraints(max_makespan)
+        #
+        #
+        # # 设置目标：最小化最大完成时间
+        # self.model.setObjective(self.max_completion, GRB.MINIMIZE)
+        #
+        # # 求解模型
+        # self.model.optimize()
+        #
+        # # 求解模型
+        # self.model.optimize()
+        max_makespan = sum(p.total_duration for p in self.program.projects.values())
+        self._add_time_variables(max_makespan)
+        self._add_dependency_constraints(max_makespan)
+        self._add_resource_constraints(max_makespan)
 
-        # 设置目标：最小化最大结束时间
-        makespan = self.model.addVar(name="makespan")
-        self.model.addConstr(
-            makespan == max_(
-                self.project_vars[p_id] + p.total_duration
-                for p_id, p in self.program.projects.items()
-            ),
-            name="makespan_def"
+        # === 修改目标函数 ===
+        # 计算总开始时间
+        total_start = quicksum(
+            self.project_vars[proj.project_id]
+            for proj in self.program.projects.values()
         )
-        self.model.setObjective(makespan, GRB.MINIMIZE)
 
-        # 求解并返回结果
+        # 分层目标：优先最小化最大完成时间，其次最小化总开始时间
+        self.model.ModelSense = GRB.MINIMIZE
+        self.model.setObjectiveN(self.max_completion, index=0, priority=2)
+        self.model.setObjectiveN(total_start, index=1, priority=1)
+
+        # 求解模型
         self.model.optimize()
 
         if self.model.status == GRB.OPTIMAL:
+            # 获取调度方案
+            schedule = {}
+            resource_usage_info = {}
+            for proj in self.program.projects.values():
+                start_time = sum(t * self.x[proj.project_id][t].X for t in range(max_makespan + 1))
+                start_time = int(start_time)
+
+                schedule[proj.project_id] = start_time
+
+                # 记录资源使用情况
+                for res in self.global_res_limits:
+                    if res not in resource_usage_info:
+                        resource_usage_info[res] = {}
+                    resource_usage = quicksum(
+                        self.x[proj.project_id][t].X * proj.global_resources_request.get(res, 0)
+                        for t in range(max_makespan + 1)
+                    )
+                    finish_time = start_time + proj.total_duration
+                    for t in range(start_time, finish_time):
+                        if t not in resource_usage_info[res]:
+                            resource_usage_info[res][t] = 0
+                        resource_usage_info[res][t] += proj.global_resources_request.get(res, 0)
+
+            # 整理资源使用信息
+            max_resource_usage = {}
+            for res, usage in resource_usage_info.items():
+                max_usage = max(usage.values()) if usage else 0
+                max_resource_usage[res] = max_usage
+
             return {
-                p_id: var.X for p_id, var in self.project_vars.items()
+                "schedule": schedule,
+                "resource_usage": max_resource_usage
             }
         else:
             raise Exception("No feasible solution found")
 
-    def _add_decision_variables(self):
-        """添加决策变量"""
-        max_makespan = sum(p.total_duration for p in self.program.projects.values())
 
+    def _add_time_variables(self, T):
+        """添加时间周期变量"""
         for proj in self.program.projects.values():
-            # 项目开始时间
-            var_name = f"start_{proj.project_id}"
+            # 每个项目的开始时间变量
             self.project_vars[proj.project_id] = self.model.addVar(
-                lb=0, ub=max_makespan, vtype=GRB.INTEGER, name=var_name
+                lb=0, ub=T, vtype=GRB.INTEGER, name=f"start_{proj.project_id}"
+            )
+            # 时间周期变量
+            self.x[proj.project_id] = {}
+            for t in range(T + 1):
+                self.x[proj.project_id][t] = self.model.addVar(
+                    vtype=GRB.BINARY, name=f"x_{proj.project_id}_{t}"
+                )
+
+    def _add_dependency_constraints(self, T):
+        """添加前驱约束"""
+        # 每个项目只能在一个时间周期启动
+        for proj in self.program.projects.values():
+            self.model.addConstr(
+                quicksum(self.x[proj.project_id][t] for t in range(T + 1)) == 1,
+                name=f"single_start_{proj.project_id}"
             )
 
-            # 为每个项目创建资源占用二进制变量 (proj_id, res, t)
-            self.resource_usage[proj.project_id] = {}
-            for res in self.global_res_limits:
-                self.resource_usage[proj.project_id][res] = [
-                    self.model.addVar(vtype=GRB.BINARY, name=f"res_{res}_proj_{proj.project_id}_t{t}")
-                    for t in range(max_makespan + 1)
-                ]
-
-    def _add_dependency_constraints(self):
-        """添加项目依赖约束"""
-        """添加项目依赖约束"""
+        # 前驱约束
         for proj in self.program.projects.values():
             for pred_id in proj.predecessors:
-                if pred_id not in self.program.projects:
-                    continue  # 跳过无效依赖
                 pred = self.program.projects[pred_id]
                 self.model.addConstr(
-                    self.project_vars[proj.project_id] >=
-                    self.project_vars[pred_id] + pred.total_duration,
-                    name=f"dep_{pred_id}_{proj.project_id}"
+                    quicksum(t * self.x[proj.project_id][t] for t in range(T + 1)) >=
+                    quicksum(t * self.x[pred.project_id][t] for t in range(T + 1)) +
+                    pred.total_duration,
+                    name=f"predecessor_{pred.project_id}_{proj.project_id}"
                 )
-    def _add_resource_constraints(self):
-        """资源约束正确建模"""
-        max_makespan = sum(p.total_duration for p in self.program.projects.values())
 
-        for res, limit in self.global_res_limits.items():
-            for t in range(max_makespan + 1):
-                # 生成资源需求总和
-                total_demand = quicksum(
-                    p.global_resources_request.get(res, 0) *
-                    self.resource_usage[p.project_id][res][t]
-                    for p in self.program.projects.values()
-                )
-                self.model.addConstr(total_demand <= limit, name=f"res_{res}_t{t}")
-
-                # 关联资源占用变量与项目时间段
-                for p in self.program.projects.values():
-                    # 时间t在项目执行期间内时，资源占用变量=1
-                    self.model.addGenConstrIndicator(
-                        self.resource_usage[p.project_id][res][t],
-                        True,
-                        (self.project_vars[p.project_id] <= t) &
-                        (t < self.project_vars[p.project_id] + p.total_duration)
+    def _add_resource_constraints(self, T):
+        """添加全局资源约束"""
+        number_resource = len(self.global_res_limits)
+        for k, res in enumerate(self.global_res_limits):
+            limit = self.global_res_limits[res]
+            for t in range(T + 1):
+                use_resource = 0
+                for proj in self.program.projects.values():
+                    duration = proj.total_duration
+                    start_pred = t - duration + 1
+                    if start_pred < 0:
+                        start_pred = 0
+                    use_resource += quicksum(
+                        self.x[proj.project_id][tt] * proj.global_resources_request.get(res, 0)
+                        for tt in range(start_pred, t + 1)
                     )
+                self.model.addConstr(
+                    use_resource <= limit,
+                    name=f"resource_{res}_{t}"
+                )
+
+        # 计算最大完成时间
+        max_completion = self.model.addVar(name="max_completion")
+        for proj in self.program.projects.values():
+            self.model.addConstr(
+                quicksum(t * self.x[proj.project_id][t] for t in range(T + 1)) + proj.total_duration <=
+                max_completion,
+                name=f"max_completion_{proj.project_id}"
+            )
+        self.max_completion = max_completion
+
+
+# class GurobiAlgorithm:
+#     """使用Gurobi求解项目群精确调度方案"""
+#
+#     def __init__(self, program: Program):
+#         self.program = program
+#         self.model = Model("ProgramScheduling")
+#         self.project_vars = {}  # 项目开始时间变量
+#         self.resource_usage = {}  # 新增：资源占用变量
+#
+#         # 从配置获取全局资源限制
+#         self.global_res_limits = program.global_resources
+#
+#     def solve(self) -> Dict:
+#         """求解并返回调度方案"""
+#         self._add_decision_variables()
+#         self._add_dependency_constraints()
+#         self._add_resource_constraints()
+#
+#         # 设置目标：最小化最大结束时间
+#         makespan = self.model.addVar(name="makespan")
+#         self.model.addConstr(
+#             makespan == max_(
+#                 self.project_vars[p_id] + p.total_duration
+#                 for p_id, p in self.program.projects.items()
+#             ),
+#             name="makespan_def"
+#         )
+#         self.model.setObjective(makespan, GRB.MINIMIZE)
+#
+#         # 求解并返回结果
+#         self.model.optimize()
+#
+#         if self.model.status == GRB.OPTIMAL:
+#             return {
+#                 p_id: var.X for p_id, var in self.project_vars.items()
+#             }
+#         else:
+#             raise Exception("No feasible solution found")
+#
+#     def _add_decision_variables(self):
+#         """添加决策变量"""
+#         max_makespan = sum(p.total_duration for p in self.program.projects.values())
+#
+#         for proj in self.program.projects.values():
+#             # 项目开始时间
+#             var_name = f"start_{proj.project_id}"
+#             self.project_vars[proj.project_id] = self.model.addVar(
+#                 lb=0, ub=max_makespan, vtype=GRB.INTEGER, name=var_name
+#             )
+#
+#             # 为每个项目创建资源占用二进制变量 (proj_id, res, t)
+#             self.resource_usage[proj.project_id] = {}
+#             for res in self.global_res_limits:
+#                 self.resource_usage[proj.project_id][res] = [
+#                     self.model.addVar(vtype=GRB.BINARY, name=f"res_{res}_proj_{proj.project_id}_t{t}")
+#                     for t in range(max_makespan + 1)
+#                 ]
+#
+#     def _add_dependency_constraints(self):
+#         """添加项目依赖约束"""
+#         for proj in self.program.projects.values():
+#             for pred_id in proj.predecessors:
+#                 if pred_id not in self.program.projects:
+#                     continue  # 跳过无效依赖
+#                 pred = self.program.projects[pred_id]
+#                 self.model.addConstr(
+#                     self.project_vars[proj.project_id] >=
+#                     self.project_vars[pred_id] + pred.total_duration,
+#                     name=f"dep_{pred_id}_{proj.project_id}"
+#                 )
+#     def _add_resource_constraints(self):
+#         """资源约束正确建模"""
+#         max_makespan = sum(p.total_duration for p in self.program.projects.values())
+#
+#         for res, limit in self.global_res_limits.items():
+#             for t in range(max_makespan + 1):
+#                 # 生成资源需求总和
+#                 total_demand = quicksum(
+#                     p.global_resources_request.get(res, 0) *
+#                     self.resource_usage[p.project_id][res][t]
+#                     for p in self.program.projects.values()
+#                 )
+#                 self.model.addConstr(total_demand <= limit, name=f"res_{res}_t{t}")
+#
+#                 # 关联资源占用变量与项目时间段
+#                 for p in self.program.projects.values():
+#                     # 时间t在项目执行期间内时，资源占用变量=1
+#                     self.model.addGenConstrIndicator(
+#                         self.resource_usage[p.project_id][res][t],
+#                         True,
+#                         (self.project_vars[p.project_id] <= t) &
+#                         (t < self.project_vars[p.project_id] + p.total_duration)
+#                     )
 
 class MTPCAlgorithm:
     """

@@ -44,15 +44,6 @@ def main():
     reader = ProjectReader()
     program = reader.read_projects_from_dir("data/projects/")
 
-    # 保存项目群基本信息
-    program_info = {
-        "num_projects": len(program.projects),
-        "global_resources": program.global_resources,
-        "project_ids": list(program.projects.keys())
-    }
-    with open(res_dir / "program_info.json", 'w') as f:
-        json.dump(program_info, f, indent=2)
-
     # =================================================================
     # 阶段2: 精确求解初始调度
     # =================================================================
@@ -64,6 +55,18 @@ def main():
     gurobi = GurobiAlgorithm(program)
     gurobi_result = gurobi.solve()
     save_schedule(gurobi_result, gurobi_dir / "baseline_schedule.json")
+
+    # 将项目群各项目开始时间信息保存到对象
+    for project in program.projects.values():
+        project.start_time = gurobi_result["schedule"][project.project_id]
+
+    # 保存项目群基本信息
+    program_info = {
+        "num_projects": len(program.projects),
+        "program_info": program.to_dict()
+    }
+    with open(res_dir / "program_info.json", 'w') as f:
+        json.dump(program_info, f, indent=2)
 
     # 可视化
     ProgramVisualizer.plot_gantt(program, gurobi_dir / "gantt.png")
@@ -101,8 +104,7 @@ def main():
     stc_dir.mkdir()
 
     # 设置工期限制（1.2倍基准工期）
-    baseline_makespan = gurobi_result["makespan"]
-    stc = STCAlgorithm(program, time_limit=1.2 * baseline_makespan)
+    stc = STCAlgorithm(program)
     stc_result = stc.run()
 
     # 保存缓冲数据

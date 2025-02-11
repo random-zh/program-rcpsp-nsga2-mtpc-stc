@@ -152,6 +152,19 @@ class Program:
         if self.projects is None:
             self.projects = {}
 
+    def to_dict(self) -> dict:
+        """将当前 Program 类实例转换为字典"""
+        return {
+            "program_id": self.program_id,
+            "global_resources": self.global_resources,
+            "projects": {
+                project_id: project.to_dict() for project_id, project in self.projects.items()
+            } if self.projects is not None else None,
+            "total_duration": self.total_duration,
+            "robustness": self.robustness,
+            "resource_usage": self.resource_usage
+        }
+
     # === 方法定义 ===
     def add_project(self, project: Project) -> None:
         """添加项目"""
