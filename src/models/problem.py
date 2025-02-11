@@ -78,7 +78,7 @@ class Project:
     # === 动态属性（初始化后由方法填充） ===
     total_duration: Optional[int] = None  # 项目总工期（调度后更新）
     robustness: Optional[float] = None  # 项目鲁棒性（调度后更新）
-    global_resources_request: Dict[str, int] = None  # 共享资源需求（如 {"machine": 2}）
+    global_resources_request: Dict[str, int] = field(default_factory=dict)  # 共享资源需求（如 {"machine": 2}）
     start_time: Optional[int] = None  # 新增：项目的基准开始时间
     weight: int = 1  # 新增：项目的权重
 

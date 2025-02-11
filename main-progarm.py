@@ -1,4 +1,4 @@
-# main-project.py
+# main-program.py
 import json
 import logging
 from pathlib import Path
@@ -12,13 +12,13 @@ from models.algorithm import GurobiAlgorithm, MTPCAlgorithm, STCAlgorithm
 
 def setup_logging(res_dir: Path) -> None:
     """配置日志系统"""
+    # 通过 handlers 来指定处理器
     logging.basicConfig(
-        filename=res_dir / "execution.log",
         level=logging.INFO,
         format="%(asctime)s - %(levelname)s - %(message)s",
         handlers=[
-            logging.FileHandler(res_dir / "execution.log"),
-            logging.StreamHandler()
+            logging.FileHandler(res_dir / "execution.log"),  # 文件处理器
+            logging.StreamHandler()  # 控制台处理器
         ]
     )
 
@@ -33,7 +33,7 @@ def save_schedule(schedule: dict, path: Path) -> None:
 def main():
     # 初始化结果目录
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    res_dir = Path("results") / f"program_run_{timestamp}"
+    res_dir = Path("res") / f"program_run_{timestamp}"
     res_dir.mkdir(parents=True, exist_ok=True)
     setup_logging(res_dir)
 

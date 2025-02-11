@@ -95,7 +95,11 @@ class ProjectReader:
             successors=[]  # 项目间关系需额外处理
         )
         # 配置项目属性
-        project.global_resources_request = data["optimization"]["global_resources_request"]
+        global_resources_value = data["optimization"]["global_resources_request"]
+        # 将其包装为字典
+        project.global_resources_request = {
+            "global 1": global_resources_value
+        }
         project.total_duration = data["optimization"]["total_duration"]
         project.robustness = data["optimization"]["robustness"]
 
