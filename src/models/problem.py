@@ -73,7 +73,7 @@ class Project:
     local_resources: Dict[str, int]  # 本地资源限额（如 {"worker": 5}）
     successors: List[int]  # 项目间的依赖关系（后继项目ID列表）
     # === 紧前活动需通过方法动态添加 ===
-    predecessors: List[int] = field(default_factory=list)
+    predecessors: List[str] = field(default_factory=list)
 
     # === 动态属性（初始化后由方法填充） ===
     total_duration: Optional[int] = None  # 项目总工期（调度后更新）

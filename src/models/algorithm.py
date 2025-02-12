@@ -1,4 +1,5 @@
 # model/algorithm.py
+import itertools
 import math
 import random
 from collections import defaultdict, deque
@@ -857,17 +858,15 @@ class GurobiAlgorithm:
 class MTPCAlgorithm:
     """
     MTPC算法类：基于基准调度计划优化资源分配，最小化拖期惩罚成本
-    核心功能：
-    1. 根据基准调度计划生成活动序列 LIST_1
-    2. 按顺序分配资源，动态添加资源弧
-    3. 计算拖期惩罚成本（TPC）
     """
 
     def __init__(self, program: Program):
         self.program = program
-        self.A_R: Set[Tuple[str, str]] = set()  # 资源弧集合（格式：(来源项目ID, 目标项目ID)）
+        # 修改资源弧格式为 (来源项目ID, 目标项目ID, 资源类型, 分配资源量)
+        self.A_R: Set[Tuple[str, str, str, int]] = set()
         self.alloc: Dict[str, Dict[str, int]] = {}  # 资源分配量 {项目ID: {资源类型: 数量}}
         self.total_epc: float = 0.0  # 总拖期惩罚成本
+        self.sigma = 0.2  # 对数正态分布的标准差参数
 
     def run(self) -> Dict[str, Any]:
         """执行MTPC主流程"""
@@ -884,7 +883,6 @@ class MTPCAlgorithm:
 
         # 计算总EPC并保存结果
         self.total_epc = self._calculate_total_epc()
-        # self._save_results()
 
         return {
             "resource_arcs": list(self.A_R),
@@ -893,128 +891,295 @@ class MTPCAlgorithm:
         }
 
     def _initialize_alloc(self) -> None:
-        """初始化资源分配：虚拟项目拥有全部全局资源"""
-        # 初始化虚拟项目1资源分配为全局资源容量
-        self.alloc = {
-            "0": {res: cap for res, cap in self.program.global_resources.items()}
-        }
-        # 初始化其他项目资源分配为0
+        """初始化资源分配：虚拟起始项目拥有全部全局资源"""
+        # 初始化所有项目的资源分配为0
         for proj in self.program.projects.values():
             self.alloc[proj.project_id] = {res: 0 for res in self.program.global_resources}
+
+        # 为项目1分配全部全局资源容量
+        project_1_id = "1_virtual"  # 或实际项目1的ID
+        if project_1_id in self.program.projects:
+            self.alloc[project_1_id] = {res: cap for res, cap in self.program.global_resources.items()}
 
     def _generate_project_list(self) -> List[Project]:
         """生成项目序列 LIST_1（排序规则：基准开始时间↑ → 权重↓ → 项目ID↑）"""
 
         return sorted(
             self.program.projects.values(),
-            key=lambda p: (p.start_time, -getattr(p, 'priority', 0), p.project_id)
+            key=lambda p: (p.start_time, -getattr(p, 'weight', 1), p.project_id)
         )
 
 
     def _allocate_resources_for_project(self, proj: Project) -> None:
         """为项目分配资源（核心逻辑）"""
-        required  = proj.global_resources_request
+        needs_resource_arcs = False
 
-        # 步骤1：检查资源是否充足
-        avail = self._calculate_available_resources(proj)
-        if all(avail[res] >= required.get(res, 0) for res in self.program.global_resources):
-            # 步骤3：直接分配资源
-            self._direct_allocation(proj, avail)
+        # 步骤1：判断资源是否满足需求
+        for res, demand in proj.global_resources_request.items():
+            # 计算可用资源量
+            avail_resources = self._calculate_available_resources_for_type(proj, res)
+            if avail_resources < demand:
+                needs_resource_arcs = True
+                break
+
+        if not needs_resource_arcs:
+            # 直接从紧前项目分配资源
+            self._direct_allocation(proj)
         else:
-            # 步骤2：寻找最优资源弧
-            H_j = self._find_optimal_Hj(proj)
-            self.A_R.update(H_j)
-            self._allocate_with_priority(proj, H_j)
+            # 寻找最优资源弧并分配
+            self._allocate_with_additional_arcs(proj)
 
-    def _calculate_available_resources(self, proj: Project) -> Dict[str, int]:
-        """计算可用资源"""
-        avail = {res: 0 for res in self.program.global_resources}
-        for pred_id in proj.predecessors:
-            if pred_id in self.alloc:
-                avail = {res: avail[res] + self.alloc[pred_id][res] for res in avail}
-        return avail
+    def _calculate_available_resources_for_type(self, proj: 'Project', res_type: str) -> int:
+        """计算特定类型资源的可用量"""
+        return sum(
+            self.alloc[pred_id][res_type]
+            for pred_id in proj.predecessors
+            if pred_id in self.alloc
+        )
 
-    def _find_optimal_Hj(self, proj: Project) -> Set[Tuple[str, str]]:
-        """寻找最小EPC的候选集"""
-        candidates = [
-            (h.project_id, proj.project_id)
-            for h in self.program.projects.values()
-            if h.project_id not in proj.predecessors and
-               h.start_time + h.total_duration <= proj.start_time
-        ]
+    def _direct_allocation(self, proj: 'Project') -> None:
+        """直接从紧前项目分配资源，并添加资源弧"""
+        sorted_preds = self._sort_predecessors(proj)
+
+        for res, demand in proj.global_resources_request.items():
+            remaining = demand
+            for pred_id in sorted_preds:
+                available = self.alloc[pred_id][res]
+                to_allocate = min(available, remaining)
+
+                if to_allocate > 0:
+                    # 更新资源分配
+                    self.alloc[proj.project_id][res] += to_allocate
+                    self.alloc[pred_id][res] -= to_allocate
+
+                    # 添加资源弧
+                    self.A_R.add((pred_id, proj.project_id, res, to_allocate))
+
+                    remaining -= to_allocate
+                    if remaining <= 0:
+                        break
+
+    def _sort_predecessors(self, proj: 'Project') -> List[str]:
+        """按优先级规则对紧前项目排序"""
+        return sorted(
+            proj.predecessors,
+            key=lambda pid: (
+                len(self.program.projects[pid].successors),
+                -(self.program.projects[pid].start_time +
+                  self.program.projects[pid].total_duration),
+                -sum(self.alloc[pid].values()),
+                pid
+            )
+        )
+
+    def _allocate_with_additional_arcs(self, proj: 'Project') -> None:
+        """寻找最优资源弧并分配资源"""
+        # 寻找最优候选集
+        H_j = self._find_optimal_Hj(proj)
+
+        # 根据优先准则进行分配
+        task_list = self._generate_task_list(H_j)
+
+        # 为每种资源类型分配资源
+        for res in self.program.global_resources:
+            remaining = proj.global_resources_request.get(res, 0)
+            for h_id, *_ in task_list:
+                available = self.alloc[h_id][res]
+                to_allocate = min(available, remaining)
+
+                if to_allocate > 0:
+                    # 更新资源分配
+                    self.alloc[proj.project_id][res] += to_allocate
+                    self.alloc[h_id][res] -= to_allocate
+
+                    # 添加资源弧
+                    self.A_R.add((h_id, proj.project_id, res, to_allocate))
+
+                    remaining -= to_allocate
+                    if remaining <= 0:
+                        break
+
+    def _find_optimal_Hj(self, proj: 'Project') -> Set[Tuple[str, str]]:
+        """找最小EPC的候选集（包含能提供资源的紧前项目）"""
         min_epc = float('inf')
         best_Hj = set()
-        for candidate in candidates:
-            H_j = {candidate}
-            epc = self._calculate_single_epc(proj, H_j)
-            if epc < min_epc:
-                min_epc = epc
-                best_Hj = H_j
+        min_size = float('inf')
+        # 1. 获取能提供资源的紧前项目集合
+        resource_providing_preds = set()
+        for pred_id in proj.predecessors:
+            for res_type in self.program.global_resources:
+                if self.alloc[pred_id][res_type] > 0:
+                    resource_providing_preds.add(pred_id)
+                    break
+        # 2. 计算各资源类型的需求
+        total_demands = {
+            res: proj.global_resources_request.get(res, 0)
+            for res in self.program.global_resources
+        }
+
+        # 3. 先计算从紧前项目获得的资源及剩余需求
+        remaining_demands = dict(total_demands)
+
+        for pred_id in resource_providing_preds:
+            for res_type, needed in remaining_demands.items():
+                available = self.alloc[pred_id][res_type]
+                if available > 0:
+                    remaining_demands[res_type] = max(0, needed - available)
+
+        # 4. 寻找可以提供额外资源的项目
+        potential_providers = [
+            h for h in self.program.projects.values()
+            if (h.project_id not in proj.predecessors and  # 不是紧前项目
+                h.start_time + h.total_duration <= proj.start_time and  # 满足时序约束
+                any(self.alloc[h.project_id][res] > 0 for res in remaining_demands)  # 有可用资源
+                )
+        ]
+
+        # 5. 生成并评估候选集合
+        def can_satisfy_demands(providers: List['Project']) -> bool:
+            """检查给定的项目集合是否能满足资源需求"""
+            available = defaultdict(int)
+            for h in providers:
+                for res_type in total_demands:
+                    available[res_type] += self.alloc[h.project_id][res_type]
+            return all(available[res] >= total_demands[res]
+                       for res in total_demands)
+
+        # 5.1 首先评估只包含紧前项目的候选集（不可能紧靠紧前满足需求）
+        if resource_providing_preds:
+            base_Hj = {(pred_id, proj.project_id)
+                       for pred_id in resource_providing_preds}
+            # 如果达到了就有问题了
+            if can_satisfy_demands([self.program.projects[pid] for pid in resource_providing_preds]):
+                raise Exception("Resource demands cannot be satisfied by predecessors")
+                # epc = self._calculate_single_epc(proj, base_Hj)
+                # if epc < min_epc:
+                #     min_epc = epc
+                #     best_Hj = base_Hj
+
+        # 5.2 评估包含额外项目的候选集
+        for k in range(1, len(potential_providers) + 1):
+            for combo in itertools.combinations(potential_providers, k):
+                # 构建包含紧前项目和当前候选项目的集合
+                H_j = {(pred_id, proj.project_id)
+                       for pred_id in resource_providing_preds}
+                for provider in combo:
+                    H_j.add((provider.project_id, proj.project_id))
+                # 目前Hj = {紧前项目+k个数量的组合项目}
+                # 检查是否能满足资源需求
+                # 紧前项目+k个数量的组合项目
+                providers = [self.program.projects[pid]
+                             for pid in resource_providing_preds]
+                providers.extend(combo)
+
+                if can_satisfy_demands(providers):
+                    epc = self._calculate_single_epc(proj, H_j)
+                    size = len(H_j)
+                    if size < min_size or (size == min_size and epc < min_epc):
+                        min_epc = epc
+                        min_size = size
+                        best_Hj = H_j
+
         return best_Hj
 
-    def _calculate_single_epc(self, proj: Project, H_j: Set[Tuple[str, str]]) -> float:
+    def _calculate_single_epc(self, proj: 'Project', H_j: Set[Tuple[str, str]]) -> float:
         """计算单个候选集的EPC"""
         epc = 0.0
-        all_arcs = self.A_R.union(H_j)
+        # 获取现有资源弧的项目对
+        existing_arcs = {(arc[0], arc[1]) for arc in self.A_R}
+        all_arcs = existing_arcs.union(H_j)
 
-        # 获取所有紧前活动（包括资源弧）
-        predecessors = set(proj.predecessors).union(
-            {arc[0] for arc in all_arcs if arc[1] == proj.project_id}
-        )
+        # 获取所有前驱
+        predecessors = self._get_all_predecessors(proj, all_arcs)
 
         for pred_id in predecessors:
             pred = self.program.projects[pred_id]
-            # 计算LPL(i,j)简化为项目i的工期
-            lpl = pred.total_duration
-            threshold = proj.start_time - pred.start_time - lpl
+            lpl = self._calculate_lpl(pred_id, proj.project_id, all_arcs)
+            time_gap = proj.start_time - pred.start_time - lpl
 
-            # 计算对数正态分布概率
-            mu = np.log(pred.total_duration)  # 假设均值等于基准工期
-            sigma = 0.2  # 标准差假设为0.2
-            if threshold > 0:
-                pr = 1 - lognorm.cdf(threshold, s=sigma, scale=np.exp(mu))
-                epc += pr  # w_j=1
+            if time_gap > 0:
+                mu = np.log(pred.total_duration)
+                pr = 1 - lognorm.cdf(time_gap, s=self.sigma, scale=np.exp(mu))
+                epc += pr  # w_j = 1
+
         return epc
 
-    def _direct_allocation(self, proj: Project, avail: Dict[str, int]) -> None:
-        """直接分配资源（无需添加额外弧）"""
-        for res in self.program.global_resources:
-            self.alloc[proj.project_id][res] = avail[res]
-            self.alloc["0"][res] -= avail[res]
+    def _get_all_predecessors(self, proj: 'Project', project_arcs: Set[Tuple[str, str]]) -> Set[str]:
+        """获取所有前驱项目"""
+        all_preds = set()
+        to_process = list(proj.predecessors)
 
-    def _allocate_with_priority(self, proj: Project, H_j: Set[Tuple[str, str]]) -> None:
-        """根据优先准则分配资源（简化实现）"""
-        # 按准则排序（准则）
-        for res in self.program.global_resources:
-            sorted_arcs = sorted(
-                H_j,
-                key=lambda arc: (
-                    len(self.program.projects[arc[0]].successors),
-                    -self.program.projects[arc[0]].weight,  # 准则2：权重降序
-                    -(self.program.projects[arc[0]].start_time +
-                      self.program.projects[arc[0]].total_duration),
-                    -self.alloc[arc[0]][res],
-                    0 if arc[0] in proj.predecessors else 1
-                )
-            )
+        while to_process:
+            current = to_process.pop()
+            if current not in all_preds:
+                all_preds.add(current)
+                if current in self.program.projects:
+                    to_process.extend(self.program.projects[current].predecessors)
+                # 添加资源依赖前驱
+                for src, dst in project_arcs:
+                    if dst == current:
+                        to_process.append(src)
 
-        for res in self.program.global_resources:
-            demand = proj.global_resources_request.get(res, 0)
-            for arc in sorted_arcs:
-                h_id = arc[0]
-                alloc = min(self.alloc[h_id][res], demand)
-                if alloc > 0:
-                    self.alloc[proj.project_id][res] += alloc
-                    self.alloc[h_id][res] -= alloc
-                    demand -= alloc
-                if demand <= 0:
-                    break
+        return all_preds
+
+    def _calculate_lpl(self, start_id: str, end_id: str, project_arcs: Set[Tuple[str, str]]) -> int:
+        """计算考虑资源弧的最长路径长度"""
+        network = defaultdict(dict)
+
+        # 添加项目依赖边
+        for pid, proj in self.program.projects.items():
+            for succ_id in proj.successors:
+                network[pid][succ_id] = proj.total_duration
+
+        # 添加资源依赖边
+        for src, dst in project_arcs:
+            network[src][dst] = self.program.projects[src].total_duration
+
+        def find_longest_path(current: str, target: str, visited: set) -> int:
+            if current == target:
+                return 0
+            if current in visited:
+                return float('-inf')
+
+            max_length = float('-inf')
+            visited.add(current)
+
+            for next_node, weight in network[current].items():
+                path_length = find_longest_path(next_node, target, visited)
+                if path_length != float('-inf'):
+                    max_length = max(max_length, weight + path_length)
+
+            visited.remove(current)
+            return max_length
+
+        path_length = find_longest_path(start_id, end_id, set())
+        return max(0, path_length)
+
+    def _generate_task_list(self, H_j: Set[Tuple[str, str]]) -> List[Tuple[str, ...]]:
+        """生成排序后的任务列表"""
+        task_list = []
+        for h_id, _ in H_j:
+            h_proj = self.program.projects[h_id]
+            task_list.append((
+                h_id,
+                len(h_proj.successors),
+                h_proj.start_time + h_proj.total_duration,
+                sum(self.alloc[h_id].values())
+            ))
+
+        return sorted(task_list, key=lambda x: (
+            -x[1],  # 后继数量降序
+            x[2],   # 完成时间升序
+            -x[3],  # 可用资源量降序
+            x[0]    # 项目ID升序
+        ))
 
     def _calculate_total_epc(self) -> float:
         """计算全局总EPC"""
         total = 0.0
         for proj in self.program.projects.values():
-            total += self._calculate_single_epc(proj, self.A_R)
+            # 使用空集合作为额外资源弧，因为实际的资源弧已经在self.A_R中
+            total += self._calculate_single_epc(proj, set())
         return total
 
 

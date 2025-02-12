@@ -198,7 +198,8 @@ class ProjectReader:
         virtual_start = program.projects.get("1_virtual")
         virtual_start.successors = [
             id_project_map[2].project_id,
-            id_project_map[3].project_id
+            id_project_map[3].project_id,
+            id_project_map[5].project_id
         ]
 
         # 处理虚拟项目13（终止节点）
