@@ -93,14 +93,15 @@ def main():
     with open(mtpc_dir / "resource_arcs.json", 'w') as f:
         json.dump({
             "resource_arcs": list(mtpc_result["resource_arcs"]),
-            "total_tpc": mtpc_result["total_tpc"]
+            "total_tpc": mtpc_result["total_tpc"],
+            "allocations": mtpc_result["allocations"]
         }, f, indent=2)
 
     # 可视化资源流
     ProgramVisualizer.plot_resource_network(
-        program=program,
-        resource_arcs=mtpc_result["resource_arcs"],
-        save_path=mtpc_dir / "resource_network.png"
+        program,
+        mtpc_result["resource_arcs"],
+        str(mtpc_dir / "resource_network.png")
     )
 
     # =================================================================

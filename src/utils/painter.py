@@ -6,7 +6,7 @@ import matplotlib
 matplotlib.use('TkAgg')  # 显式设置后端
 from models.algorithm import Individual
 import matplotlib.pyplot as plt
-from typing import List, Dict, Set, Tuple
+from typing import List, Dict, Set, Tuple, Optional
 from models.problem import Program, Project, Activity
 import networkx as nx
 
@@ -156,28 +156,107 @@ class ProgramVisualizer:
         plt.close()
 
     @staticmethod
-    def plot_resource_network(program: Program, resource_arcs: set, save_path: str):
-        """绘制资源流网络图"""
-        plt.figure(figsize=(12, 8))
+    def plot_resource_network(program: Program, resource_arcs: List[Tuple[str, str, str, int]],
+                              save_path: Optional[str] = None, figsize=(10, 6)):
+        """
+        绘制资源流网络图
+        Args:
+            program: Program对象，包含项目信息
+            resource_arcs: 资源弧列表，每个元素为(from_id, to_id, resource_type, amount)
+            save_path: 保存路径
+            figsize: 图像大小
+        """
+        plt.figure(figsize=figsize)
 
-        # 绘制项目节点
-        projects = sorted(program.projects.values(), key=lambda p: p.start_time)
-        for i, proj in enumerate(projects):
-            plt.scatter(proj.start_time, i, s=200, label=f"Proj {proj.project_id}")
+        # 获取所有活动信息并按开始时间排序
+        activities = []
+        for proj in program.projects.values():
+            for act in proj.activities.values():
+                activities.append({
+                    'id': act.activity_id,
+                    'start': act.start_time,
+                    'duration': act.duration,
+                    'resource': sum(act.resource_request.values())  # 资源需求总量作为高度
+                })
 
-        # 绘制资源弧
+        # 按开始时间排序
+        activities.sort(key=lambda x: x['start'])
+
+        # 绘制活动框
+        max_resource = max(act['resource'] for act in activities)
+        y_positions = {}  # 记录每个活动的y坐标位置
+
+        for i, act in enumerate(activities):
+            # 计算y位置，确保活动不重叠
+            y_pos = i * (max_resource + 2)  # 在y轴上错开放置
+            y_positions[act['id']] = y_pos
+
+            # 绘制活动框
+            rect = plt.Rectangle(
+                (act['start'], y_pos),
+                act['duration'],
+                act['resource'],
+                fill=True,
+                facecolor='white',
+                edgecolor='black'
+            )
+            plt.gca().add_patch(rect)
+
+            # 添加活动编号
+            plt.text(
+                act['start'] + act['duration'] / 2,
+                y_pos + act['resource'] / 2,
+                str(act['id']),
+                horizontalalignment='center',
+                verticalalignment='center'
+            )
+
+        # 绘制资源流箭头
         for arc in resource_arcs:
-            src = next(p for p in projects if p.project_id == arc[0])
-            dest = next(p for p in projects if p.project_id == arc[1])
-            plt.plot([src.start_time + src.total_duration, dest.start_time],
-                     [projects.index(src), projects.index(dest)],
-                     'gray', alpha=0.5)
+            from_id = int(arc[0])
+            to_id = int(arc[1])
 
-        plt.xlabel("Time")
-        plt.ylabel("Project Sequence")
-        plt.title("Resource Flow Network")
-        plt.legend(loc='upper right')
-        plt.savefig(save_path)
+            # 获取起点和终点活动
+            from_act = next(act for act in activities if act['id'] == from_id)
+            to_act = next(act for act in activities if act['id'] == to_id)
+
+            # 计算箭头起点和终点
+            start_x = from_act['start'] + from_act['duration']
+            start_y = y_positions[from_id] + from_act['resource'] / 2
+            end_x = to_act['start']
+            end_y = y_positions[to_id] + to_act['resource'] / 2
+
+            # 判断是否为紧前紧后关系
+            is_precedence = any(
+                to_id in program.projects[proj.project_id].activities[from_id].successors
+                for proj in program.projects.values()
+                if from_id in proj.activities and to_id in proj.activities
+            )
+
+            # 绘制箭头，使用不同线型区分紧前紧后关系
+            plt.arrow(
+                start_x, start_y,
+                end_x - start_x, end_y - start_y,
+                head_width=0.5,
+                head_length=0.5,
+                linestyle='-' if is_precedence else '--',
+                color='black',
+                length_includes_head=True
+            )
+
+        # 设置坐标轴
+        plt.xlabel('时间')
+        plt.ylabel('资源')
+
+        # 调整图表范围
+        plt.xlim(-1, max(act['start'] + act['duration'] for act in activities) + 1)
+        plt.ylim(-1, max(y_positions.values()) + max_resource + 2)
+
+        # 添加网格
+        plt.grid(True, linestyle='--', alpha=0.3)
+
+        if save_path:
+            plt.savefig(save_path, bbox_inches='tight', dpi=300)
         plt.close()
 
     @staticmethod

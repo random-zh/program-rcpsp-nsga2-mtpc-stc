@@ -891,7 +891,7 @@ class MTPCAlgorithm:
         }
 
     def _initialize_alloc(self) -> None:
-        """初始化资源分配：虚拟起始项目拥有全部全局资源"""
+        """初始化资源分配：虚拟起始项目拥有全部全局资源，最后的虚拟项目分配为资源最大量"""
         # 初始化所有项目的资源分配为0
         for proj in self.program.projects.values():
             self.alloc[proj.project_id] = {res: 0 for res in self.program.global_resources}
@@ -900,6 +900,12 @@ class MTPCAlgorithm:
         project_1_id = "1_virtual"  # 或实际项目1的ID
         if project_1_id in self.program.projects:
             self.alloc[project_1_id] = {res: cap for res, cap in self.program.global_resources.items()}
+
+        # 设置最后的虚拟项目资源需求量为全局资源容量
+        project_13_id = "13_virtual"
+        if project_13_id in self.program.projects:
+            self.program.projects[project_13_id].global_resources_request = self.program.global_resources
+
 
     def _generate_project_list(self) -> List[Project]:
         """生成项目序列 LIST_1（排序规则：基准开始时间↑ → 权重↓ → 项目ID↑）"""
@@ -1047,15 +1053,9 @@ class MTPCAlgorithm:
 
         # 5.1 首先评估只包含紧前项目的候选集（不可能紧靠紧前满足需求）
         if resource_providing_preds:
-            base_Hj = {(pred_id, proj.project_id)
-                       for pred_id in resource_providing_preds}
             # 如果达到了就有问题了
             if can_satisfy_demands([self.program.projects[pid] for pid in resource_providing_preds]):
                 raise Exception("Resource demands cannot be satisfied by predecessors")
-                # epc = self._calculate_single_epc(proj, base_Hj)
-                # if epc < min_epc:
-                #     min_epc = epc
-                #     best_Hj = base_Hj
 
         # 5.2 评估包含额外项目的候选集
         for k in range(1, len(potential_providers) + 1):
@@ -1073,8 +1073,23 @@ class MTPCAlgorithm:
                 providers.extend(combo)
 
                 if can_satisfy_demands(providers):
+
+                    # 临时添加H_j中的资源弧到self.A_R
+                    temp_arcs = set()
+                    for src, dst in H_j:
+                        # 为每个资源类型添加资源弧
+                        for res_type in self.program.global_resources:
+                            temp_arc = (src, dst, res_type, 0)  # 使用0作为临时分配量
+                            if temp_arc not in self.A_R:
+                                self.A_R.add(temp_arc)
+                                temp_arcs.add(temp_arc)
+
                     epc = self._calculate_single_epc(proj, H_j)
                     size = len(H_j)
+
+                    # 移除临时添加的资源弧
+                    self.A_R.difference_update(temp_arcs)
+
                     if size < min_size or (size == min_size and epc < min_epc):
                         min_epc = epc
                         min_size = size
@@ -1087,17 +1102,21 @@ class MTPCAlgorithm:
         epc = 0.0
         # 获取现有资源弧的项目对
         existing_arcs = {(arc[0], arc[1]) for arc in self.A_R}
+        # Hj包含了紧前可以提供资源的项目以及目前额外的提供资源的项目
+        # all_arcs 代表目前所有的资源弧（包括紧前提供的）
         all_arcs = existing_arcs.union(H_j)
 
-        # 获取所有前驱
+        # 获取j项目的所有前驱（包括资源弧）
         predecessors = self._get_all_predecessors(proj, all_arcs)
 
+        # 计算EPC
         for pred_id in predecessors:
+            # 紧前项目pred
             pred = self.program.projects[pred_id]
             lpl = self._calculate_lpl(pred_id, proj.project_id, all_arcs)
             time_gap = proj.start_time - pred.start_time - lpl
 
-            if time_gap > 0:
+            if time_gap > 0 and pred.total_duration > 0:
                 mu = np.log(pred.total_duration)
                 pr = 1 - lognorm.cdf(time_gap, s=self.sigma, scale=np.exp(mu))
                 epc += pr  # w_j = 1
@@ -1108,6 +1127,11 @@ class MTPCAlgorithm:
         """获取所有前驱项目"""
         all_preds = set()
         to_process = list(proj.predecessors)
+
+        # 首次添加资源依赖前驱
+        for src, dst in project_arcs:
+            if dst == proj:
+                to_process.append(src)
 
         while to_process:
             current = to_process.pop()
@@ -1124,6 +1148,8 @@ class MTPCAlgorithm:
 
     def _calculate_lpl(self, start_id: str, end_id: str, project_arcs: Set[Tuple[str, str]]) -> int:
         """计算考虑资源弧的最长路径长度"""
+
+        # 构建项目网络图
         network = defaultdict(dict)
 
         # 添加项目依赖边
@@ -1131,29 +1157,29 @@ class MTPCAlgorithm:
             for succ_id in proj.successors:
                 network[pid][succ_id] = proj.total_duration
 
-        # 添加资源依赖边
+        # 添加资源弧
         for src, dst in project_arcs:
-            network[src][dst] = self.program.projects[src].total_duration
+            network[src][dst] = 0  # 资源弧的权重为0。计算工期的时候，可以不考虑资源弧
 
-        def find_longest_path(current: str, target: str, visited: set) -> int:
+        # 定义深度优先搜索函数
+        def dfs(current: str, target: str, visited: Set[str], path_duration: int) -> int:
             if current == target:
-                return 0
-            if current in visited:
-                return float('-inf')
+                return path_duration
 
-            max_length = float('-inf')
+            max_duration = float('-inf')
             visited.add(current)
 
             for next_node, weight in network[current].items():
-                path_length = find_longest_path(next_node, target, visited)
-                if path_length != float('-inf'):
-                    max_length = max(max_length, weight + path_length)
+                if next_node not in visited:
+                    max_duration = max(max_duration, dfs(next_node, target, visited, path_duration + weight))
 
             visited.remove(current)
-            return max_length
+            return max_duration
 
-        path_length = find_longest_path(start_id, end_id, set())
-        return max(0, path_length)
+        # 计算最长路径长度
+        longest_path_length = dfs(start_id, end_id, set(), 0)
+
+        return longest_path_length
 
     def _generate_task_list(self, H_j: Set[Tuple[str, str]]) -> List[Tuple[str, ...]]:
         """生成排序后的任务列表"""
@@ -1177,9 +1203,12 @@ class MTPCAlgorithm:
     def _calculate_total_epc(self) -> float:
         """计算全局总EPC"""
         total = 0.0
+        # 从self.A_R中提取所有资源弧对
+        existing_arcs = {(arc[0], arc[1]) for arc in self.A_R}
+
         for proj in self.program.projects.values():
-            # 使用空集合作为额外资源弧，因为实际的资源弧已经在self.A_R中
-            total += self._calculate_single_epc(proj, set())
+            # 使用完整的资源弧集合计算EPC
+            total += self._calculate_single_epc(proj, existing_arcs)
         return total
 
 
