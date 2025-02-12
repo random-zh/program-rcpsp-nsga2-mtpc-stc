@@ -149,6 +149,7 @@ class ProjectReader:
         # ====================
         # 3. 设置项目属性
         # ====================
+
         for seq_id, project in id_project_map.items():
             # 获取原始项目ID（如"j301_1"）
             original_id = project.project_id
@@ -156,6 +157,14 @@ class ProjectReader:
             # 生成新项目ID（如"2_j301_1"）
             new_project_id = f"{seq_id}_{original_id}"
             project.project_id = new_project_id
+
+        for seq_id, project in id_project_map.items():
+            # # 获取原始项目ID（如"j301_1"）
+            # original_id = project.project_id
+            #
+            # # 生成新项目ID（如"2_j301_1"）
+            # new_project_id = f"{seq_id}_{original_id}"
+            # project.project_id = new_project_id
 
             # 从program_dic获取依赖关系
             dependencies = self.program_dic.get(seq_id)

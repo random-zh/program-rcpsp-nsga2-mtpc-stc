@@ -4,6 +4,10 @@ import random
 from collections import defaultdict, deque
 from copy import deepcopy
 from typing import Dict, List, Optional, Tuple, Any, Set
+
+import numpy as np
+from scipy.stats import lognorm
+
 from .problem import Project, Activity, Program
 from utils.config_loader import config
 from gurobipy import Model, GRB, quicksum, max_, LinExpr
@@ -727,20 +731,6 @@ class GurobiAlgorithm:
 
     def solve(self) -> Dict:
         """求解并返回调度方案"""
-        # max_makespan = sum(p.total_duration for p in self.program.projects.values())
-        # self._add_time_variables(max_makespan)
-        # self._add_dependency_constraints(max_makespan)
-        # self._add_resource_constraints(max_makespan)
-        #
-        #
-        # # 设置目标：最小化最大完成时间
-        # self.model.setObjective(self.max_completion, GRB.MINIMIZE)
-        #
-        # # 求解模型
-        # self.model.optimize()
-        #
-        # # 求解模型
-        # self.model.optimize()
         max_makespan = sum(p.total_duration for p in self.program.projects.values())
         self._add_time_variables(max_makespan)
         self._add_dependency_constraints(max_makespan)
@@ -864,101 +854,6 @@ class GurobiAlgorithm:
             )
         self.max_completion = max_completion
 
-
-# class GurobiAlgorithm:
-#     """使用Gurobi求解项目群精确调度方案"""
-#
-#     def __init__(self, program: Program):
-#         self.program = program
-#         self.model = Model("ProgramScheduling")
-#         self.project_vars = {}  # 项目开始时间变量
-#         self.resource_usage = {}  # 新增：资源占用变量
-#
-#         # 从配置获取全局资源限制
-#         self.global_res_limits = program.global_resources
-#
-#     def solve(self) -> Dict:
-#         """求解并返回调度方案"""
-#         self._add_decision_variables()
-#         self._add_dependency_constraints()
-#         self._add_resource_constraints()
-#
-#         # 设置目标：最小化最大结束时间
-#         makespan = self.model.addVar(name="makespan")
-#         self.model.addConstr(
-#             makespan == max_(
-#                 self.project_vars[p_id] + p.total_duration
-#                 for p_id, p in self.program.projects.items()
-#             ),
-#             name="makespan_def"
-#         )
-#         self.model.setObjective(makespan, GRB.MINIMIZE)
-#
-#         # 求解并返回结果
-#         self.model.optimize()
-#
-#         if self.model.status == GRB.OPTIMAL:
-#             return {
-#                 p_id: var.X for p_id, var in self.project_vars.items()
-#             }
-#         else:
-#             raise Exception("No feasible solution found")
-#
-#     def _add_decision_variables(self):
-#         """添加决策变量"""
-#         max_makespan = sum(p.total_duration for p in self.program.projects.values())
-#
-#         for proj in self.program.projects.values():
-#             # 项目开始时间
-#             var_name = f"start_{proj.project_id}"
-#             self.project_vars[proj.project_id] = self.model.addVar(
-#                 lb=0, ub=max_makespan, vtype=GRB.INTEGER, name=var_name
-#             )
-#
-#             # 为每个项目创建资源占用二进制变量 (proj_id, res, t)
-#             self.resource_usage[proj.project_id] = {}
-#             for res in self.global_res_limits:
-#                 self.resource_usage[proj.project_id][res] = [
-#                     self.model.addVar(vtype=GRB.BINARY, name=f"res_{res}_proj_{proj.project_id}_t{t}")
-#                     for t in range(max_makespan + 1)
-#                 ]
-#
-#     def _add_dependency_constraints(self):
-#         """添加项目依赖约束"""
-#         for proj in self.program.projects.values():
-#             for pred_id in proj.predecessors:
-#                 if pred_id not in self.program.projects:
-#                     continue  # 跳过无效依赖
-#                 pred = self.program.projects[pred_id]
-#                 self.model.addConstr(
-#                     self.project_vars[proj.project_id] >=
-#                     self.project_vars[pred_id] + pred.total_duration,
-#                     name=f"dep_{pred_id}_{proj.project_id}"
-#                 )
-#     def _add_resource_constraints(self):
-#         """资源约束正确建模"""
-#         max_makespan = sum(p.total_duration for p in self.program.projects.values())
-#
-#         for res, limit in self.global_res_limits.items():
-#             for t in range(max_makespan + 1):
-#                 # 生成资源需求总和
-#                 total_demand = quicksum(
-#                     p.global_resources_request.get(res, 0) *
-#                     self.resource_usage[p.project_id][res][t]
-#                     for p in self.program.projects.values()
-#                 )
-#                 self.model.addConstr(total_demand <= limit, name=f"res_{res}_t{t}")
-#
-#                 # 关联资源占用变量与项目时间段
-#                 for p in self.program.projects.values():
-#                     # 时间t在项目执行期间内时，资源占用变量=1
-#                     self.model.addGenConstrIndicator(
-#                         self.resource_usage[p.project_id][res][t],
-#                         True,
-#                         (self.project_vars[p.project_id] <= t) &
-#                         (t < self.project_vars[p.project_id] + p.total_duration)
-#                     )
-
 class MTPCAlgorithm:
     """
     MTPC算法类：基于基准调度计划优化资源分配，最小化拖期惩罚成本
@@ -972,10 +867,11 @@ class MTPCAlgorithm:
         self.program = program
         self.A_R: Set[Tuple[str, str]] = set()  # 资源弧集合（格式：(来源项目ID, 目标项目ID)）
         self.alloc: Dict[str, Dict[str, int]] = {}  # 资源分配量 {项目ID: {资源类型: 数量}}
-        self.tpc: float = 0.0  # 总拖期惩罚成本
+        self.total_epc: float = 0.0  # 总拖期惩罚成本
 
     def run(self) -> Dict[str, Any]:
         """执行MTPC主流程"""
+
         # 初始化资源分配（虚拟项目0拥有全部全局资源）
         self._initialize_alloc()
 
@@ -983,142 +879,143 @@ class MTPCAlgorithm:
         sorted_projects = self._generate_project_list()
 
         # 遍历项目进行资源分配
-        for proj_id in sorted_projects:
-            self._allocate_resources_for_project(proj_id)
+        for proj in sorted_projects:
+            self._allocate_resources_for_project(proj)
 
-        # 更新Program的全局资源占用
-        self.program.resource_usage = self._get_global_resource_usage()
+        # 计算总EPC并保存结果
+        self.total_epc = self._calculate_total_epc()
+        # self._save_results()
 
         return {
-            "resource_arcs": self.A_R,
-            "allocations": self.alloc,
-            "total_tpc": self.tpc,
-            "global_resource_usage": self.program.resource_usage
+            "resource_arcs": list(self.A_R),
+            "total_epc": self.total_epc,
+            "allocations": self.alloc
         }
 
     def _initialize_alloc(self) -> None:
         """初始化资源分配：虚拟项目拥有全部全局资源"""
         # 初始化虚拟项目1资源分配为全局资源容量
-        self.alloc["1"] = {res: cap for res, cap in self.program.global_resources.items()}
+        self.alloc = {
+            "0": {res: cap for res, cap in self.program.global_resources.items()}
+        }
         # 初始化其他项目资源分配为0
-        for proj_id in self.program.projects:
-            self.alloc[proj_id] = {res: 0 for res in self.program.global_resources}
+        for proj in self.program.projects.values():
+            self.alloc[proj.project_id] = {res: 0 for res in self.program.global_resources}
 
-    def _generate_project_list(self) -> List[str]:
+    def _generate_project_list(self) -> List[Project]:
         """生成项目序列 LIST_1（排序规则：基准开始时间↑ → 权重↓ → 项目ID↑）"""
-        projects = list(self.program.projects.values())
-        # 假设Project类有权重属性（若无可替换为其他业务逻辑）
-        sorted_projects = sorted(
-            projects,
-            key=lambda p: (
-                p.start_time,  # 基准开始时间升序
-                -p.priority,  # 权重降序（需在Project类中添加priority字段）
-                p.project_id  # 项目ID升序
-            )
+
+        return sorted(
+            self.program.projects.values(),
+            key=lambda p: (p.start_time, -getattr(p, 'priority', 0), p.project_id)
         )
-        return [p.project_id for p in sorted_projects]
 
-    def _allocate_resources_for_project(self, proj_id: str) -> None:
+
+    def _allocate_resources_for_project(self, proj: Project) -> None:
         """为项目分配资源（核心逻辑）"""
-        proj = self.program.projects[proj_id]
-        required_resources = proj.shared_resources_request
+        required  = proj.global_resources_request
 
-        # 步骤1：计算可用资源（来自紧前项目）
+        # 步骤1：检查资源是否充足
         avail = self._calculate_available_resources(proj)
-        if all(avail[res] >= required_resources.get(res, 0) for res in self.program.global_resources):
+        if all(avail[res] >= required.get(res, 0) for res in self.program.global_resources):
+            # 步骤3：直接分配资源
             self._direct_allocation(proj, avail)
         else:
-            # 步骤2：添加额外资源弧
-            H_j = self._find_minimal_Hj(proj)
+            # 步骤2：寻找最优资源弧
+            H_j = self._find_optimal_Hj(proj)
             self.A_R.update(H_j)
             self._allocate_with_priority(proj, H_j)
 
     def _calculate_available_resources(self, proj: Project) -> Dict[str, int]:
-        """计算可用资源（来自紧前项目和资源弧）"""
+        """计算可用资源"""
         avail = {res: 0 for res in self.program.global_resources}
         for pred_id in proj.predecessors:
-            if pred_id in self.program.projects:
-                avail = {
-                    res: avail[res] + self.alloc[pred_id][res]
-                    for res in self.program.global_resources
-                }
+            if pred_id in self.alloc:
+                avail = {res: avail[res] + self.alloc[pred_id][res] for res in avail}
         return avail
 
-    def _find_minimal_Hj(self, proj: Project) -> Set[Tuple[str, str]]:
-        """寻找最小备选集 H_j*（简化实现：选择第一个可行解）"""
-        candidates = []
-        # 遍历所有可能的前驱项目（非紧前且时间不冲突）
-        for h_proj in self.program.projects.values():
-            if (h_proj.project_id not in proj.predecessors and
-                    h_proj.start_time + h_proj.total_duration <= proj.start_time):
-                candidates.append((h_proj.project_id, proj.project_id))
-        return set(candidates[:1])  # 实际需按TPC最小化选择
+    def _find_optimal_Hj(self, proj: Project) -> Set[Tuple[str, str]]:
+        """寻找最小EPC的候选集"""
+        candidates = [
+            (h.project_id, proj.project_id)
+            for h in self.program.projects.values()
+            if h.project_id not in proj.predecessors and
+               h.start_time + h.total_duration <= proj.start_time
+        ]
+        min_epc = float('inf')
+        best_Hj = set()
+        for candidate in candidates:
+            H_j = {candidate}
+            epc = self._calculate_single_epc(proj, H_j)
+            if epc < min_epc:
+                min_epc = epc
+                best_Hj = H_j
+        return best_Hj
+
+    def _calculate_single_epc(self, proj: Project, H_j: Set[Tuple[str, str]]) -> float:
+        """计算单个候选集的EPC"""
+        epc = 0.0
+        all_arcs = self.A_R.union(H_j)
+
+        # 获取所有紧前活动（包括资源弧）
+        predecessors = set(proj.predecessors).union(
+            {arc[0] for arc in all_arcs if arc[1] == proj.project_id}
+        )
+
+        for pred_id in predecessors:
+            pred = self.program.projects[pred_id]
+            # 计算LPL(i,j)简化为项目i的工期
+            lpl = pred.total_duration
+            threshold = proj.start_time - pred.start_time - lpl
+
+            # 计算对数正态分布概率
+            mu = np.log(pred.total_duration)  # 假设均值等于基准工期
+            sigma = 0.2  # 标准差假设为0.2
+            if threshold > 0:
+                pr = 1 - lognorm.cdf(threshold, s=sigma, scale=np.exp(mu))
+                epc += pr  # w_j=1
+        return epc
 
     def _direct_allocation(self, proj: Project, avail: Dict[str, int]) -> None:
         """直接分配资源（无需添加额外弧）"""
         for res in self.program.global_resources:
-            demand = proj.shared_resources_request.get(res, 0)
-            self.alloc[proj.project_id][res] = demand
-            # 从虚拟项目0扣除资源
-            self.alloc["0"][res] -= demand
+            self.alloc[proj.project_id][res] = avail[res]
+            self.alloc["0"][res] -= avail[res]
 
     def _allocate_with_priority(self, proj: Project, H_j: Set[Tuple[str, str]]) -> None:
         """根据优先准则分配资源（简化实现）"""
-        # 按准则排序（此处简化，实际需实现6个准则）
-        sorted_Hj = sorted(
-            H_j,
-            key=lambda arc: (
-                -len(self.program.projects[arc[0]].successors),  # 准则1：紧后数量升序
-                -self.program.projects[arc[0]].weight,  # 准则2：权重降序
-                -(self.program.projects[arc[0]].start_time +  # 准则3：结束时间降序
-                  self.program.projects[arc[0]].total_duration),
-                -self.alloc[arc[0]][res]  # 准则4：可提供量降序
-            )
-        )
-        # 分配资源
+        # 按准则排序（准则）
         for res in self.program.global_resources:
-            demand = proj.shared_resources_request.get(res, 0)
-            for h_proj_id, _ in sorted_Hj:
-                flow = min(self.alloc[h_proj_id][res], demand)
-                self.alloc[proj.project_id][res] += flow
-                self.alloc[h_proj_id][res] -= flow
-                demand -= flow
+            sorted_arcs = sorted(
+                H_j,
+                key=lambda arc: (
+                    len(self.program.projects[arc[0]].successors),
+                    -self.program.projects[arc[0]].weight,  # 准则2：权重降序
+                    -(self.program.projects[arc[0]].start_time +
+                      self.program.projects[arc[0]].total_duration),
+                    -self.alloc[arc[0]][res],
+                    0 if arc[0] in proj.predecessors else 1
+                )
+            )
+
+        for res in self.program.global_resources:
+            demand = proj.global_resources_request.get(res, 0)
+            for arc in sorted_arcs:
+                h_id = arc[0]
+                alloc = min(self.alloc[h_id][res], demand)
+                if alloc > 0:
+                    self.alloc[proj.project_id][res] += alloc
+                    self.alloc[h_id][res] -= alloc
+                    demand -= alloc
                 if demand <= 0:
                     break
 
-    def _get_global_resource_usage(self) -> Dict[str, List[int]]:
-        """提取全局资源时间轴占用"""
-        T = self.program.total_duration
-        resource_usage = {res: [0] * T for res in self.program.global_resources}
+    def _calculate_total_epc(self) -> float:
+        """计算全局总EPC"""
+        total = 0.0
         for proj in self.program.projects.values():
-            start = proj.start_time
-            end = start + proj.total_duration
-            for res in self.program.global_resources:
-                demand = proj.shared_resources_request.get(res, 0)
-                for t in range(start, end):
-                    if t < T:
-                        resource_usage[res][t] += demand
-        return resource_usage
-
-    def _calculate_tpc(self, proj: Project) -> float:
-        """计算单个项目的拖期惩罚成本（修正版本）"""
-        tpc = 0.0
-        for pred_id in proj.predecessors:
-            if (pred_id, proj.project_id) in self.A_R:
-                pred_project = self.program.projects.get(pred_id)
-                if not pred_project:
-                    continue
-
-                # 计算时间差（实际工期 - 计划时间差）
-                planned_time_window = proj.start_time - pred_project.start_time
-                time_diff = pred_project.total_duration - planned_time_window
-                penalty = max(0, time_diff)
-
-                # 拖期惩罚成本 = 项目权重 * 拖期概率 * 惩罚值
-                tpc += proj.weight * 0.2 * penalty  # 假设拖期概率为0.2
-
-        self.tpc += tpc
-        return tpc
+            total += self._calculate_single_epc(proj, self.A_R)
+        return total
 
 
 class ArtiguesAlgorithm:

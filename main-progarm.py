@@ -72,6 +72,13 @@ def main():
     ProgramVisualizer.plot_gantt(program, gurobi_dir / "gantt.png")
     ProgramVisualizer.plot_resource_allocation(program, gurobi_dir / "resource.png")
 
+    # 绘制初始网络图
+    ProgramVisualizer.plot_network(
+        program,
+        save_path=res_dir / "original_network.png",
+        title="Original Program Network"
+    )
+
     # =================================================================
     # 阶段3: MTPC资源流分配
     # =================================================================

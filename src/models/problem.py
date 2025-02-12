@@ -1,6 +1,6 @@
 # problem.py
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple, Set
 
 
 class Activity(object):
@@ -144,6 +144,10 @@ class Program:
     total_duration: Optional[int] = None  # 项目群总工期
     robustness: Optional[float] = None  # 全局鲁棒性
     resource_usage: Dict[str, List[int]] = None  # 新增：全局资源时间轴占用
+
+    # 新增资源弧
+    unavoidable_arcs: Set[Tuple[int, int]] = field(default_factory=set)  # A_U: 不可避免资源弧
+    extra_arcs: Set[Tuple[int, int]] = field(default_factory=set)        # A_E: 额外资源弧
 
     def __post_init__(self):
         """ 初始化后验证数据合法性 """

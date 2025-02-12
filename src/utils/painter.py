@@ -1,10 +1,14 @@
 # utils/painter.py
+import logging
+from pathlib import Path
+
 import matplotlib
 matplotlib.use('TkAgg')  # 显式设置后端
 from models.algorithm import Individual
 import matplotlib.pyplot as plt
-from typing import List, Dict
+from typing import List, Dict, Set, Tuple
 from models.problem import Program, Project, Activity
+import networkx as nx
 
 
 class KneeVisualizer:
@@ -33,22 +37,6 @@ class KneeVisualizer:
         plt.savefig('knee_progress.png')
         plt.close()
 
-    @staticmethod
-    def plot_pareto_front(final_population: List[Individual], knee_point: Individual):
-        """绘制最终帕累托前沿与Knee点"""
-        makespans = [ind.objectives[0] for ind in final_population]
-        robustness = [-ind.objectives[1] for ind in final_population]
-
-        plt.figure(figsize=(8, 5))
-        plt.scatter(makespans, robustness, c='gray', label='Pareto Front')
-        plt.scatter(knee_point.objectives[0], -knee_point.objectives[1],
-                    c='red', s=100, marker='*', label='Knee Point')
-        plt.xlabel('Makespan')
-        plt.ylabel('Robustness')
-        plt.legend()
-        plt.grid(True)
-        plt.savefig('final_pareto_front.png')
-        plt.close()
 
 
 class ProgramVisualizer:
@@ -215,4 +203,74 @@ class ProgramVisualizer:
 
         plt.tight_layout()
         plt.savefig(save_path)
+        plt.close()
+
+    @staticmethod
+    def plot_network(
+            program: 'Program',
+            save_path: str,
+            title: str = "Project Network",
+            resource_arcs: Set[Tuple[str, str]] = None,
+            node_size: int = 2000,
+            figsize: Tuple[int, int] = (12, 8)
+    ):
+        """绘制单代号网络图"""
+        plt.figure(figsize=figsize)
+        G = nx.DiGraph()
+
+        # 添加节点
+        for proj in program.projects.values():
+            G.add_node(
+                proj.project_id,
+                label=f"{proj.project_id}\nStart: {proj.start_time}\nDur: {proj.total_duration}"
+            )
+
+        # 添加依赖关系边
+        edge_colors = []
+        for proj in program.projects.values():
+            # 添加逻辑依赖边（黑色）
+            for succ_id in proj.successors:
+                if succ_id in program.projects:
+                    G.add_edge(proj.project_id, succ_id, color='black', style='solid')
+                    edge_colors.append('black')
+
+        # 布局算法
+        pos = nx.spring_layout(G, seed=42)
+
+        # 绘制节点
+        nx.draw_networkx_nodes(
+            G, pos,
+            node_color='lightblue',
+            node_size=node_size,
+            alpha=0.8
+        )
+
+        # 绘制标签
+        labels = nx.get_node_attributes(G, 'label')
+        nx.draw_networkx_labels(
+            G, pos,
+            labels=labels,
+            font_size=8,
+            verticalalignment='center'
+        )
+
+        # 绘制边
+        edge_styles = [G[u][v]['style'] for u, v in G.edges()]
+        nx.draw_networkx_edges(
+            G, pos,
+            edge_color=edge_colors,
+            style=edge_styles,
+            arrows=True
+        )
+
+        # 添加图例
+        plt.plot([], [], color='black', linestyle='solid', label='Logical Dependency')
+        if resource_arcs:
+            plt.plot([], [], color='red', linestyle='dashed', label='Resource Arc')
+        plt.legend(loc='upper right')
+
+        plt.title(title)
+        plt.axis('off')
+        plt.tight_layout()
+        plt.savefig(save_path, dpi=300)
         plt.close()
