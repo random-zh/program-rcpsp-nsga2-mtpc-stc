@@ -1,5 +1,7 @@
 # problem.py
+import json
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Set
 
 
@@ -84,6 +86,11 @@ class Project:
 
     activities: Dict[int, Activity] = None  # 活动字典 {activity_id: Activity}
 
+    # 新增缓冲相关属性
+    buffered_start_time: Optional[int] = None  # 缓冲后的开始时间
+    project_epc: Optional[float] = None  # 项目的EPC值
+    buffer_size: Optional[int] = None  # 项目前的缓冲大小
+
     def __post_init__(self):
         """初始化后验证数据合法性"""
         if not isinstance(self.project_id, (str, int)):
@@ -99,7 +106,10 @@ class Project:
             "predecessors": self.predecessors,
             "activities": {aid: act.to_dict() for aid, act in self.activities.items()},
             "start_time": self.start_time,
-            "weight": self.weight
+            "weight": self.weight,
+            "buffered_start_time": self.buffered_start_time,
+            "project_epc": self.project_epc,
+            "buffer_size": self.buffer_size
         }
 
     # === 方法定义 ===
@@ -145,9 +155,13 @@ class Program:
     robustness: Optional[float] = None  # 全局鲁棒性
     resource_usage: Dict[str, List[int]] = None  # 新增：全局资源时间轴占用
 
-    # 新增资源弧
-    unavoidable_arcs: Set[Tuple[int, int]] = field(default_factory=set)  # A_U: 不可避免资源弧
-    extra_arcs: Set[Tuple[int, int]] = field(default_factory=set)        # A_E: 额外资源弧
+    # 新增资源弧和缓冲相关属性
+    resource_arcs: List[Tuple[str, str, str, int]] = field(default_factory=list)  # [(from_id, to_id, res_type, amount)]
+    project_buffers: Dict[str, int] = field(default_factory=dict)  # {proj_id: buffer_size}
+    total_epc: Optional[float] = None  # 总EPC值
+    buffered_completion_time: Optional[int] = None  # 缓冲后的完工时间
+
+    # 新增缓冲
 
     def __post_init__(self):
         """ 初始化后验证数据合法性 """
@@ -166,7 +180,12 @@ class Program:
             } if self.projects is not None else None,
             "total_duration": self.total_duration,
             "robustness": self.robustness,
-            "resource_usage": self.resource_usage
+            "resource_usage": self.resource_usage,
+            "resource_arcs": self.resource_arcs,
+            "project_buffers": self.project_buffers,
+            "total_epc": self.total_epc,
+            "buffered_completion_time": self.buffered_completion_time
+
         }
 
     # === 方法定义 ===
@@ -177,3 +196,8 @@ class Program:
         if project.project_id in self.projects:
             raise ValueError(f"项目ID {project.project_id} 已存在！")
         self.projects[project.project_id] = project
+
+    def save_to_json(self, filepath: Path) -> None:
+        """将Program对象保存为JSON文件"""
+        with open(filepath, 'w') as f:
+            json.dump(self.to_dict(), f, indent=2)

@@ -366,3 +366,95 @@ class ProgramVisualizer:
         plt.tight_layout()
         plt.savefig(save_path, dpi=300)
         plt.close()
+
+    @staticmethod
+    def plot_buffer(program: Program, save_path: Optional[str] = None, figsize=(12, 8)):
+        """
+        绘制项目层面的甘特图，显示缓冲效果
+
+        Args:
+            program: Program对象（包含缓冲信息）
+            save_path: 保存路径
+            figsize: 图像大小
+        """
+        plt.figure(figsize=figsize)
+
+        # 获取全局资源和时间范围
+        max_resource = max(program.global_resources.values())
+        max_time = max(
+            (proj.start_time) + proj.total_duration
+            for proj in program.projects.values()
+        )
+
+        # 项目显示的位置（按资源需求排序）
+        y_positions = {}  # {project_id: y_position}
+        sorted_projects = sorted(
+            program.projects.values(),
+            key=lambda p: sum(p.global_resources_request.values() if p.global_resources_request else [0]),
+            reverse=True
+        )
+
+        # 分配Y轴位置
+        y_pos = 0
+        for proj in sorted_projects:
+            # 使用项目的全局资源需求
+            proj_resource = sum(proj.global_resources_request.values() if proj.global_resources_request else [0])
+            y_positions[proj.project_id] = y_pos
+            y_pos += proj_resource + 2  # 添加间隔
+
+        # 绘制项目矩形
+        for proj in sorted_projects:
+            y_pos = y_positions[proj.project_id]
+            # 使用项目的全局资源需求作为高度
+            height = sum(proj.global_resources_request.values() if proj.global_resources_request else [0])
+
+            # 绘制原始矩形
+            rect = plt.Rectangle(
+                (proj.start_time, y_pos),
+                proj.total_duration,
+                height,
+                facecolor='white',
+                edgecolor='black',
+                alpha=0.7
+            )
+            plt.gca().add_patch(rect)
+
+            # 添加项目ID
+            plt.text(
+                proj.start_time + proj.total_duration / 2,
+                y_pos + height / 2,
+                str(proj.project_id),
+                horizontalalignment='center',
+                verticalalignment='center'
+            )
+
+            # 如果有缓冲，绘制缓冲条
+            buffer_size = program.project_buffers.get(proj.project_id, 0)
+            if buffer_size > 0:
+                # 在项目开始时间绘制黑色缓冲条
+                buffer_rect = plt.Rectangle(
+                    (proj.start_time, y_pos),
+                    buffer_size,
+                    height,
+                    facecolor='black',
+                    alpha=0.3
+                )
+                plt.gca().add_patch(buffer_rect)
+
+        # 设置坐标轴
+        plt.xlabel('Time')
+        plt.ylabel('Resource')
+        plt.xlim(-1, max_time + 1)
+        plt.ylim(-1, y_pos + 2)
+
+        # 添加网格
+        plt.grid(True, linestyle='--', alpha=0.3)
+
+        # 添加标题
+        plt.title('Project Schedule with Buffers (Project Level)')
+
+        if save_path:
+            plt.savefig(save_path, bbox_inches='tight', dpi=300)
+            plt.close()
+        else:
+            plt.show()

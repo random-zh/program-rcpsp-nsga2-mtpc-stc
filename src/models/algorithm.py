@@ -5,6 +5,7 @@ import math
 import random
 from collections import defaultdict, deque
 from copy import deepcopy
+from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Any, Set
 
 import numpy as np
@@ -885,6 +886,18 @@ class MTPCAlgorithm:
         # 计算总EPC并保存结果
         self.total_epc = self._calculate_total_epc()
 
+        # 更新Program对象的信息
+        self.program.resource_arcs = list(self.A_R)
+        self.program.total_epc = self.total_epc
+
+        # 更新每个项目的EPC
+        for proj_id, proj in self.program.projects.items():
+            proj.project_epc = self._calculate_single_epc(proj, {(arc[0], arc[1]) for arc in self.A_R})
+
+        # 保存结果
+        # result_path = Path("results") / "mtpc_program.json"
+        # self.program.save_to_json(result_path)
+
         return {
             "resource_arcs": list(self.A_R),
             "total_epc": self.total_epc,
@@ -1473,6 +1486,7 @@ class STCAlgorithm:
 
     def __init__(self, program: Program, resource_network: Dict, max_completion_time: int):
         self.program = deepcopy(program)  # 深拷贝防止修改原始数据
+        self.real_program = program
         self.resource_network = resource_network  # 来自MEPC的资源流网络
         self.max_completion_time = max_completion_time  # 项目群最大允许完工期限
         self.project_buffers = {}  # 改为 {proj_id: buffer_size}，只记录项目及其缓冲大小
@@ -1530,13 +1544,32 @@ class STCAlgorithm:
 
         self.final_epc = current_total_epc
 
+        # 在返回结果前更新real_program的信息
+        self.real_program.resource_arcs = self.resource_network["resource_arcs"]
+        self.real_program.project_buffers = self.project_buffers
+        self.real_program.total_epc = self.final_epc
+        self.real_program.buffered_completion_time = max(
+            proj.start_time + proj.total_duration
+            for proj in self.program.projects.values()
+        )
+
+        # 更新每个原始项目的信息
+        for proj_id, proj in self.program.projects.items():
+            real_proj = self.real_program.projects[proj_id]
+            real_proj.buffered_start_time = proj.start_time
+            real_proj.project_epc = self._calculate_single_epc(
+                proj,
+                {(arc[0], arc[1]) for arc in self.resource_network["resource_arcs"]}
+            )
+            real_proj.buffer_size = self.project_buffers.get(proj_id, 0)
+
         return {
-            "program": self.program.to_dict(),
+            "program": self.real_program.to_dict(),
             "project_buffers": self.project_buffers,
             "original_epc": self.original_epc,
             "final_epc": self.final_epc,
             "improved_percentage": ((self.original_epc - self.final_epc) / self.original_epc * 100
-                                    if self.original_epc > 0 else 0)
+                                   if self.original_epc > 0 else 0)
         }
 
     def _calculate_all_projects_epc(self) -> Dict[str, float]:

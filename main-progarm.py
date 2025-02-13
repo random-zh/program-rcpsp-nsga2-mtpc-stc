@@ -158,7 +158,7 @@ def main():
     # 保存STC结果
     with open(stc_dir / "stc_result.json", 'w') as f:
         json.dump({
-            "buffers": stc_result["buffers"],
+            "buffers": stc_result["project_buffers"],
             "original_epc": stc_result["original_epc"],
             "final_epc": stc_result["final_epc"],
             "improved_percentage": stc_result["improved_percentage"],
@@ -166,14 +166,18 @@ def main():
         }, f, indent=2)
 
     # 可视化缓冲效果
-    ProgramVisualizer.plot_gantt_comparison(
-        original=program,
-        buffered=stc_result["best_schedule"],
-        save_path=stc_dir / "gantt_comparison.png"
+    ProgramVisualizer.plot_buffer(
+        program=program,
+        save_path=stc_dir / "plot_buffer.png"
+
     )
+
+    # 保存最终的program信息（包含资源流和缓冲信息）
+    program.save_to_json(res_dir / "final_program.json")
 
     logging.info(f"All phases completed! Results saved to: {res_dir}")
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
     main()
