@@ -37,7 +37,7 @@ class ProjectReader:
         # 读取实际项目
         real_projects = self._load_real_projects(data_dir)
 
-        random.shuffle(real_projects)  # 随机打乱顺序
+        # random.shuffle(real_projects)  # 随机打乱顺序
 
         # 构建项目间依赖关系
         self._build_project_dependencies(program, real_projects)

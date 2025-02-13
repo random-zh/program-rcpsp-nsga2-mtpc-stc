@@ -9,6 +9,9 @@ algorithm:
   selection: "tournament"
   tournament_size: 2
 
+stc:
+  sigma: 0.5
+
 project:
   input_file: "data/rempsp/program.xml"
   output_dir: "results/"

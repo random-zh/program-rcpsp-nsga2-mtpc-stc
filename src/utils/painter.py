@@ -170,10 +170,18 @@ class ProgramVisualizer:
 
         # 获取所有活动信息并按开始时间排序
         activities = []
+        id_mapping = {}  # 创建ID映射字典
+        counter = 1  # 用于生成简单的数字ID
+
         for proj in program.projects.values():
-            for act in proj.activities.values():
+            for act_id, act in proj.activities.items():
+                if act_id not in id_mapping:
+                    id_mapping[str(act_id)] = counter
+                    counter += 1
+
                 activities.append({
-                    'id': act.activity_id,
+                    'id': str(act_id),
+                    'numeric_id': id_mapping[str(act_id)],
                     'start': act.start_time,
                     'duration': act.duration,
                     'resource': sum(act.resource_request.values())  # 资源需求总量作为高度
@@ -202,23 +210,27 @@ class ProgramVisualizer:
             )
             plt.gca().add_patch(rect)
 
-            # 添加活动编号
+            # 添加活动编号（使用映射后的数字ID）
             plt.text(
                 act['start'] + act['duration'] / 2,
                 y_pos + act['resource'] / 2,
-                str(act['id']),
+                str(act['numeric_id']),
                 horizontalalignment='center',
                 verticalalignment='center'
             )
 
         # 绘制资源流箭头
         for arc in resource_arcs:
-            from_id = int(arc[0])
-            to_id = int(arc[1])
+            from_id = str(arc[0])
+            to_id = str(arc[1])
 
             # 获取起点和终点活动
-            from_act = next(act for act in activities if act['id'] == from_id)
-            to_act = next(act for act in activities if act['id'] == to_id)
+            from_act = next((act for act in activities if act['id'] == from_id), None)
+            to_act = next((act for act in activities if act['id'] == to_id), None)
+
+            # 如果找不到活动，跳过该资源弧
+            if not from_act or not to_act:
+                continue
 
             # 计算箭头起点和终点
             start_x = from_act['start'] + from_act['duration']
@@ -227,11 +239,12 @@ class ProgramVisualizer:
             end_y = y_positions[to_id] + to_act['resource'] / 2
 
             # 判断是否为紧前紧后关系
-            is_precedence = any(
-                to_id in program.projects[proj.project_id].activities[from_id].successors
-                for proj in program.projects.values()
-                if from_id in proj.activities and to_id in proj.activities
-            )
+            is_precedence = False
+            for proj in program.projects.values():
+                if from_id in proj.activities and to_id in proj.activities:
+                    if to_id in proj.activities[from_id].successors:
+                        is_precedence = True
+                        break
 
             # 绘制箭头，使用不同线型区分紧前紧后关系
             plt.arrow(

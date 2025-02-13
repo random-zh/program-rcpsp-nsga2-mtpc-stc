@@ -1,5 +1,6 @@
 # model/algorithm.py
 import itertools
+import logging
 import math
 import random
 from collections import defaultdict, deque
@@ -866,7 +867,7 @@ class MTPCAlgorithm:
         self.A_R: Set[Tuple[str, str, str, int]] = set()
         self.alloc: Dict[str, Dict[str, int]] = {}  # 资源分配量 {项目ID: {资源类型: 数量}}
         self.total_epc: float = 0.0  # 总拖期惩罚成本
-        self.sigma = 0.2  # 对数正态分布的标准差参数
+        self.sigma = config["stc"]["sigma"]  # 对数正态分布的标准差参数
 
     def run(self) -> Dict[str, Any]:
         """执行MTPC主流程"""
@@ -1116,7 +1117,7 @@ class MTPCAlgorithm:
             lpl = self._calculate_lpl(pred_id, proj.project_id, all_arcs)
             time_gap = proj.start_time - pred.start_time - lpl
 
-            if time_gap > 0 and pred.total_duration > 0:
+            if time_gap >= 0 and pred.total_duration > 0:
                 mu = np.log(pred.total_duration)
                 pr = 1 - lognorm.cdf(time_gap, s=self.sigma, scale=np.exp(mu))
                 epc += pr  # w_j = 1
@@ -1130,7 +1131,7 @@ class MTPCAlgorithm:
 
         # 首次添加资源依赖前驱
         for src, dst in project_arcs:
-            if dst == proj:
+            if dst == proj.project_id:
                 to_process.append(src)
 
         while to_process:
@@ -1147,39 +1148,94 @@ class MTPCAlgorithm:
         return all_preds
 
     def _calculate_lpl(self, start_id: str, end_id: str, project_arcs: Set[Tuple[str, str]]) -> int:
-        """计算考虑资源弧的最长路径长度"""
+        """
+        计算项目间最长路径长度（路径上中间项目工期之和）
+
+        Args:
+            start_id: 起始项目ID
+            end_id: 终止项目ID
+            project_arcs: 资源依赖关系集合
+
+        Returns:
+            int: 最长路径上中间项目（不包括起始和终止项目）工期之和
+        """
 
         # 构建项目网络图
         network = defaultdict(dict)
-
-        # 添加项目依赖边
-        for pid, proj in self.program.projects.items():
-            for succ_id in proj.successors:
-                network[pid][succ_id] = proj.total_duration
 
         # 添加资源弧
         for src, dst in project_arcs:
             network[src][dst] = 0  # 资源弧的权重为0。计算工期的时候，可以不考虑资源弧
 
-        # 定义深度优先搜索函数
-        def dfs(current: str, target: str, visited: Set[str], path_duration: int) -> int:
+        # 添加项目依赖边
+        for pid, proj in self.program.projects.items():
+            for succ_id in proj.successors:
+                network[pid][succ_id] = 0  # 边的权重初始化为0
+
+        # 记录每个项目的工期
+        durations = {
+            pid: proj.total_duration
+            for pid, proj in self.program.projects.items()
+        }
+
+        def dfs(current: str, target: str, visited: Set[str]) -> Tuple[int, List[str]]:
+            """
+            深度优先搜索，返回最长路径长度和路径
+
+            Returns:
+                Tuple[int, List[str]]: (路径长度, 路径上的项目ID列表)
+            """
             if current == target:
-                return path_duration
+                return 0, [current]
 
-            max_duration = float('-inf')
+            if current in visited:
+                return float('-inf'), []
+
             visited.add(current)
+            max_length = float('-inf')
+            best_path = []
 
-            for next_node, weight in network[current].items():
+            # 遍历所有后继节点
+            for next_node in network[current]:
                 if next_node not in visited:
-                    max_duration = max(max_duration, dfs(next_node, target, visited, path_duration + weight))
+                    sub_length, sub_path = dfs(next_node, target, visited)
+                    if sub_length != float('-inf'):
+                        # 如果是起始项目，不加入其工期
+                        if next_node != target:  # 只加入中间项目的工期
+                            current_length = sub_length + durations.get(next_node, 0)
+                        else:
+                            current_length = sub_length
+
+                        if current_length > max_length:
+                            max_length = current_length
+                            best_path = [current] + sub_path
 
             visited.remove(current)
-            return max_duration
+            return max_length, best_path
 
-        # 计算最长路径长度
-        longest_path_length = dfs(start_id, end_id, set(), 0)
+        # 计算最长路径
+        max_duration, path = dfs(start_id, end_id, set())
 
-        return longest_path_length
+        if max_duration == float('-inf'):
+            return 0
+
+        # 输出详细的路径信息用于调试
+        path_info = [
+            f"{pid}({self.program.projects[pid].total_duration})"
+            for pid in path
+            if pid in self.program.projects
+        ]
+
+        middle_projects_duration = sum(
+            self.program.projects[pid].total_duration
+            for pid in path[1:-1]  # 只取中间项目
+            if pid in self.program.projects
+        )
+
+        logging.debug(f"Path from {start_id} to {end_id}: {' -> '.join(path_info)}, "
+                      f"middle projects duration: {middle_projects_duration}")
+
+        return max_duration
 
     def _generate_task_list(self, H_j: Set[Tuple[str, str]]) -> List[Tuple[str, ...]]:
         """生成排序后的任务列表"""
@@ -1206,211 +1262,502 @@ class MTPCAlgorithm:
         # 从self.A_R中提取所有资源弧对
         existing_arcs = {(arc[0], arc[1]) for arc in self.A_R}
 
+        logging.debug(f"MTPC Existing resource arcs: {existing_arcs}")
+
         for proj in self.program.projects.values():
             # 使用完整的资源弧集合计算EPC
             total += self._calculate_single_epc(proj, existing_arcs)
+            logging.debug(f"MTPC EPC for project {proj.project_id}: {self._calculate_single_epc(proj, existing_arcs)}")
         return total
 
 
-class ArtiguesAlgorithm:
-    """
-    Artigues算法（项目群层面）：生成可行性资源流网络（不优化鲁棒性）
-    """
-
-    def __init__(self, program: Program):
-        self.program = program
-        self.alloc: Dict[str, Dict[str, int]] = {}  # {项目ID: {资源类型: 量}}
-        self.resource_arcs: Set[Tuple[str, str, str]] = set()  # 资源弧 (i, j, k)
-
-    def run(self) -> Dict[str, Any]:
-        """执行算法主流程"""
-        self._initialize_alloc()
-        sorted_projects = self._get_sorted_projects()
-
-        for proj in sorted_projects:
-            self._allocate_resources(proj)
-
-        return {
-            "allocations": self.alloc,
-            "resource_arcs": self.resource_arcs
-        }
-
-    def _initialize_alloc(self) -> None:
-        """初始化资源分配：虚拟项目0拥有全部资源"""
-        self.alloc["0"] = {res: cap for res, cap in self.program.global_resources.items()}
-        for proj_id in self.program.projects:
-            self.alloc[proj_id] = {res: 0 for res in self.program.global_resources}
-
-    def _get_sorted_projects(self) -> List[Project]:
-        """按基准开始时间升序返回项目"""
-        return sorted(
-            self.program.projects.values(),
-            key=lambda p: p.start_time
-        )
-
-    def _allocate_resources(self, proj: Project) -> None:
-        """为项目分配资源"""
-        for res in self.program.global_resources:
-            req = proj.shared_resources_request.get(res, 0)
-            if req <= 0:
-                continue
-
-            # 从虚拟项目0分配资源
-            if self.alloc["0"][res] >= req:
-                flow = req
-                self.alloc[proj.project_id][res] += flow
-                self.alloc["0"][res] -= flow
-                self.resource_arcs.add(("0", proj.project_id, res))
-            else:
-                # 从已完成项目分配资源（简化实现）
-                for h_proj in self._get_completed_projects(proj.start_time):
-                    if self.alloc[h_proj.project_id][res] > 0:
-                        flow = min(req, self.alloc[h_proj.project_id][res])
-                        self.alloc[proj.project_id][res] += flow
-                        self.alloc[h_proj.project_id][res] -= flow
-                        self.resource_arcs.add((h_proj.project_id, proj.project_id, res))
-                        req -= flow
-                        if req == 0:
-                            break
-
-    def _get_completed_projects(self, current_time: int) -> List[Project]:
-        """获取在当前时间前已完成的项目"""
-        return [
-            p for p in self.program.projects.values()
-            if p.start_time + p.total_duration <= current_time
-        ]
+# class ArtiguesAlgorithm:
+#     """
+#     Artigues算法（项目群层面）：生成可行性资源流网络（不优化鲁棒性）
+#     """
+#
+#     def __init__(self, program: Program):
+#         self.program = program
+#         self.A_R = set()  # 资源弧集合 (from_id, to_id, res_type, amount)
+#         self.alloc = {}  # 资源分配 {项目ID: {资源类型: 数量}}
+#         self.remaining_resource = {}  # 记录每个活动剩余的资源需求
+#         self.total_epc = 0.0
+#         self.sigma = 0.2  # 对数正态分布的标准差参数
+#
+#     def run(self) -> Dict[str, Any]:
+#         """执行算法主流程"""
+#         # 初始化资源分配
+#         self._initialize_allocation()
+#
+#         # 获取所有时间点（按升序）
+#         time_points = self._get_time_points()
+#
+#         # 按时间顺序处理每个时间点
+#         for t in time_points:
+#             # 获取在时间t开始的活动
+#             starting_activities = self._get_activities_starting_at(t)
+#
+#             # 为每个开始的活动分配资源
+#             for j in starting_activities:
+#                 # 处理每种资源类型
+#                 for k in self.program.global_resources:
+#                     self._allocate_resource(j, k, t)
+#
+#         # 计算总的EPC
+#         self._calculate_total_epc()
+#
+#         return {
+#             "resource_arcs": list(self.A_R),
+#             "total_epc": self.total_epc,
+#             "allocations": self.alloc
+#         }
+#
+#     def _initialize_allocation(self):
+#         """初始化资源分配"""
+#         # 初始化所有项目的资源分配为0
+#         for proj in self.program.projects.values():
+#             self.alloc[proj.project_id] = {
+#                 res: 0 for res in self.program.global_resources
+#             }
+#
+#         # 初始化每个活动的资源需求
+#         self.remaining_resource = {}
+#         for proj in self.program.projects.values():
+#             for act_id, act in proj.activities.items():
+#                 for k in self.program.global_resources:
+#                     self.remaining_resource[(act_id, k)] = act.resource_request.get(k, 0)
+#
+#     def _calculate_total_epc(self):
+#         """计算总的EPC值"""
+#         self.total_epc = 0.0
+#         for proj in self.program.projects.values():
+#             self.total_epc += self._calculate_project_epc(proj)
+#
+#     def _calculate_project_epc(self, proj: Project) -> float:
+#         """计算单个项目的EPC"""
+#         epc = 0.0
+#
+#         # 获取所有前驱（包括资源前驱）
+#         predecessors = self._get_all_predecessors(proj)
+#
+#         for pred_id in predecessors:
+#             if pred_id not in self.program.projects:
+#                 continue
+#
+#             pred = self.program.projects[pred_id]
+#             lpl = self._calculate_lpl(pred_id, proj.project_id)
+#             time_gap = proj.start_time - pred.start_time - lpl
+#
+#             if time_gap > 0 and pred.total_duration > 0:
+#                 mu = np.log(pred.total_duration)
+#                 pr = 1 - lognorm.cdf(time_gap, s=self.sigma, scale=np.exp(mu))
+#                 epc += pr
+#
+#         return epc
+#
+#     def _get_all_predecessors(self, proj: Project) -> Set[str]:
+#         """获取项目的所有前驱（包括资源前驱）"""
+#         predecessors = set(proj.predecessors)
+#
+#         # 添加资源前驱
+#         for from_id, to_id, _, _ in self.A_R:
+#             if to_id == proj.project_id:
+#                 predecessors.add(from_id)
+#
+#         return predecessors
+#
+#     def _calculate_lpl(self, start_id: str, end_id: str) -> int:
+#         """计算最长路径长度"""
+#         # 构建网络图
+#         network = defaultdict(dict)
+#
+#         # 添加项目依赖边
+#         for pid, proj in self.program.projects.items():
+#             for succ_id in proj.successors:
+#                 network[pid][succ_id] = proj.total_duration
+#
+#         # 添加资源弧（权重为0）
+#         for src, dst, _, _ in self.A_R:
+#             if dst not in network[src]:  # 避免覆盖项目依赖边
+#                 network[src][dst] = 0
+#
+#         # 使用DFS计算最长路径
+#         def dfs(current: str, target: str, visited: Set[str]) -> int:
+#             if current == target:
+#                 return 0
+#             if current in visited:
+#                 return float('-inf')
+#
+#             visited.add(current)
+#             max_length = float('-inf')
+#
+#             for next_node, weight in network[current].items():
+#                 length = dfs(next_node, target, visited)
+#                 if length != float('-inf'):
+#                     max_length = max(max_length, length + weight)
+#
+#             visited.remove(current)
+#             return max_length
+#
+#         result = dfs(start_id, end_id, set())
+#         return result if result != float('-inf') else 0
+#
+#     def _get_time_points(self) -> List[int]:
+#         """获取所有活动的开始时间点（升序）"""
+#         time_points = set()
+#         for proj in self.program.projects.values():
+#             for act in proj.activities.values():
+#                 if act.start_time is not None:
+#                     time_points.add(act.start_time)
+#         return sorted(list(time_points))
+#
+#     def _get_activities_starting_at(self, t: int) -> List[str]:
+#         """获取在时间t开始的活动列表"""
+#         activities = []
+#         for proj in self.program.projects.values():
+#             for act_id, act in proj.activities.items():
+#                 if act.start_time == t:
+#                     activities.append(act_id)
+#         return activities
+#
+#     def _get_completed_activities_before(self, t: int) -> List[str]:
+#         """获取在时间t之前完成的活动列表"""
+#         completed = []
+#         for proj in self.program.projects.values():
+#             for act_id, act in proj.activities.items():
+#                 if act.start_time + act.duration <= t:
+#                     completed.append(act_id)
+#         return completed
+#
+#     def _allocate_resource(self, j: str, k: str, t: int):
+#         """为活动j分配类型k的资源"""
+#         req_k = self.remaining_resource.get((j, k), 0)
+#         if req_k <= 0:
+#             return
+#
+#         completed_acts = self._get_completed_activities_before(t)
+#         m = 0
+#
+#         while req_k > 0 and m < len(completed_acts):
+#             provider = completed_acts[m]
+#             if (provider, k) in self.remaining_resource:
+#                 # 计算可分配的资源量
+#                 flow_amount = min(req_k, self.remaining_resource[(provider, k)])
+#                 if flow_amount > 0:
+#                     # 更新资源弧和分配
+#                     self.A_R.add((provider, j, k, flow_amount))
+#
+#                     # 更新资源分配
+#                     proj_id = next(proj.project_id
+#                                    for proj in self.program.projects.values()
+#                                    if j in proj.activities)
+#                     self.alloc[proj_id][k] += flow_amount
+#
+#                     # 更新剩余需求
+#                     req_k -= flow_amount
+#                     self.remaining_resource[(provider, k)] -= flow_amount
+#             m += 1
 
 
 class STCAlgorithm:
     """
-    STC算法类：在资源分配基础上插入缓冲以提升鲁棒性
+    项目群层面的STC算法：在资源分配基础上插入项目间缓冲以提升鲁棒性
+
     核心步骤：
-    1. 计算每个活动的开始时间关键度（stc值）
-    2. 按stc值降序尝试插入缓冲
-    3. 验证缓冲插入后的可行性与鲁棒性提升
+    1. 固定第一阶段采用MEPC优化算法构建的资源流网络，计算各项目的EPCj
+    2. 根据EPC降序排列项目获得LIST3
+    3. 在EPC最大的项目前插入缓冲，更新后续项目时间
+    4. 检查完工期约束和EPC改进
+    5. 重复优化直到无法继续改进
     """
 
-    def __init__(self, program: Program):
-        self.program = program
-        self.best_schedule = None  # 存储最优调度计划
-        self.current_schedule = None  # 当前调度计划
-        self.buffer_added = []  # 记录已插入的缓冲
+    def __init__(self, program: Program, resource_network: Dict, max_completion_time: int):
+        self.program = deepcopy(program)  # 深拷贝防止修改原始数据
+        self.resource_network = resource_network  # 来自MEPC的资源流网络
+        self.max_completion_time = max_completion_time  # 项目群最大允许完工期限
+        self.project_buffers = {}  # 改为 {proj_id: buffer_size}，只记录项目及其缓冲大小
+        self.original_epc = 0.0  # 原始总EPC值
+        self.final_epc = 0.0  # 最终总EPC值
+        self.sigma = config["stc"]["sigma"]  # 对数正态分布标准差参数
 
-    def run(self, max_iter: int = 100) -> Dict[str, Any]:
-        """执行STC主流程"""
-        # 初始化：复制基准调度计划
-        self.current_schedule = deepcopy(self.program)
-        self.best_schedule = deepcopy(self.program)
-        best_robustness = self._calculate_robustness(self.best_schedule)
+    def run(self) -> Dict[str, Any]:
+        """执行STC算法主流程"""
+        # 步骤1：计算项目的单独EPC
+        projects_epc = self._calculate_all_projects_epc()
+        # 计算初始总EPC
+        self.original_epc = self._calculate_total_epc()
 
-        # 迭代优化
-        for _ in range(max_iter):
-            # 计算所有活动的stc值
-            stc_values = self._calculate_stc_values()
-            # 按stc值降序排序活动
-            sorted_activities = self._sort_activities_by_stc(stc_values)
-            improvement_found = False
-
-            for act in sorted_activities:
-                # 跳过stc值为0的活动
-                if stc_values[act.activity_id] <= 0:
-                    continue
-
-                # 尝试在活动前插入缓冲
-                original_start = act.es
-                new_start = original_start + 1  # 插入1单位缓冲
-                self._update_schedule(act, new_start)
-
-                # 检查资源可行性和鲁棒性提升
-                if self._is_schedule_feasible() and self._is_robustness_improved():
-                    self.best_schedule = deepcopy(self.current_schedule)
-                    improvement_found = True
-                    self.buffer_added.append(act.activity_id)
-                    break  # 进入下一轮迭代
-                else:
-                    # 回退缓冲插入
-                    self._update_schedule(act, original_start)
-
-            if not improvement_found:
-                break  # 无进一步优化可能
-
-        return {
-            "best_schedule": self.best_schedule,
-            "buffers_added": self.buffer_added,
-            "final_robustness": self._calculate_robustness(self.best_schedule)
-        }
-
-    def _calculate_stc_values(self) -> Dict[int, float]:
-        """计算所有活动的stc值（公式4-9, 4-10）"""
-        stc_values = {}
-        for proj in self.current_schedule.projects.values():
-            for act in proj.activities.values():
-                gamma_j = 0.0
-                # 遍历所有前驱活动
-                for pred_id in act.predecessors:
-                    pred_act = self._find_activity(pred_id)
-                    lpl = self._calculate_lpl(pred_act, act)
-                    # 简化假设：P(d_j > s_j - s_i - LPL) = 0.2（需根据实际数据调整）
-                    prob = 0.2 if (act.es - pred_act.es - lpl) < pred_act.duration else 0.0
-                    gamma_j += prob
-                stc = gamma_j * act.priority
-                stc_values[act.activity_id] = stc
-        return stc_values
-
-    def _calculate_lpl(self, pred_act: Activity, succ_act: Activity) -> int:
-        """计算最长路径LPL(i,j)（简化为前驱活动工期之和）"""
-        return pred_act.duration  # 可扩展为关键路径计算
-
-    def _sort_activities_by_stc(self, stc_values: Dict[int, float]) -> List[Activity]:
-        """按stc值降序返回活动列表"""
-        all_activities = []
-        for proj in self.current_schedule.projects.values():
-            all_activities.extend(proj.activities.values())
-        return sorted(
-            all_activities,
-            key=lambda x: stc_values.get(x.activity_id, 0),
+        # 按单个项目EPC降序排列项目
+        LIST3 = sorted(
+            [(proj_id, epc) for proj_id, epc in projects_epc.items()],
+            key=lambda x: (x[1], -self.program.projects[x[0]].weight),  # 考虑项目权重
             reverse=True
         )
 
-    def _update_schedule(self, act: Activity, new_start: int) -> None:
-        """更新活动的开始时间，并调整后续活动的时序"""
-        # 调整当前活动开始时间
-        act.es = new_start
-        act.ef = new_start + act.duration
-        # 递归调整所有后继活动（简化实现，实际需处理资源冲突）
-        for succ_id in act.successors:
-            succ_act = self._find_activity(succ_id)
-            if succ_act.es < act.ef:
-                self._update_schedule(succ_act, act.ef)
+        current_total_epc = self.original_epc
 
-    def _is_schedule_feasible(self) -> bool:
-        """检查调度计划是否可行（资源约束满足）"""
-        # 简化实现：假设资源已由MTPC/Artigues分配完成，仅检查时间冲突
-        for proj in self.current_schedule.projects.values():
-            for act in proj.activities.values():
-                for pred_id in act.predecessors:
-                    pred_act = self._find_activity(pred_id)
-                    if act.es < pred_act.ef:
-                        return False
+        while LIST3:
+            # 步骤2：选择EPC最大的项目
+            current_proj_id, proj_epc = LIST3[0]
+            if proj_epc == 0:
+                break
+
+            # 在项目前插入单位缓冲
+            buffer_inserted = self._insert_buffer(current_proj_id)
+            if not buffer_inserted:
+                LIST3.pop(0)
+                continue
+
+            # 步骤3：计算新计划的总EPC
+            new_total_epc = self._calculate_total_epc()
+
+            # 步骤4：检查完工期约束和总EPC改进
+            if self._check_completion_time() and new_total_epc < current_total_epc:
+                # 更新成功，保存当前状态
+                current_total_epc = new_total_epc
+
+                # 重新计算每个项目的EPC并更新LIST3
+                projects_epc = self._calculate_all_projects_epc()
+                LIST3 = sorted(
+                    [(proj_id, epc) for proj_id, epc in projects_epc.items()],
+                    key=lambda x: (x[1], -self.program.projects[x[0]].weight),
+                    reverse=True
+                )
+            else:
+                # 步骤5：移除缓冲
+                self._remove_buffer(current_proj_id)
+                LIST3.pop(0)  # 移除当前项目
+
+        self.final_epc = current_total_epc
+
+        return {
+            "program": self.program.to_dict(),
+            "project_buffers": self.project_buffers,
+            "original_epc": self.original_epc,
+            "final_epc": self.final_epc,
+            "improved_percentage": ((self.original_epc - self.final_epc) / self.original_epc * 100
+                                    if self.original_epc > 0 else 0)
+        }
+
+    def _calculate_all_projects_epc(self) -> Dict[str, float]:
+        """计算所有项目的EPC值"""
+        total_epc = {}
+        # 从resource_network中提取所有资源弧对
+        existing_arcs = {(arc[0], arc[1]) for arc in self.resource_network["resource_arcs"]}
+
+        logging.debug(f"STC Existing resource arcs: {existing_arcs}")
+
+        for proj_id, proj in self.program.projects.items():
+            total_epc[proj_id] = self._calculate_single_epc(proj, existing_arcs)
+            logging.debug(f"STC EPC for project {proj_id}: {total_epc[proj_id]}")
+        return total_epc
+
+    def _calculate_single_epc(self, proj: Project, existing_arcs: Set[Tuple[str, str]]) -> float:
+        """计算单个项目的EPC值"""
+        epc = 0.0
+
+        # 获取所有前驱项目（包括资源弧）
+        predecessors = self._get_all_predecessors(proj, existing_arcs)
+
+        for pred_id in predecessors:
+            pred = self.program.projects.get(pred_id)
+            if not pred:
+                raise ValueError(f"Predecessor project {pred_id} not found")
+
+            lpl = self._calculate_lpl(pred_id, proj.project_id, existing_arcs)
+            time_gap = proj.start_time - pred.start_time - lpl
+
+            if time_gap > 0 and pred.total_duration > 0:
+                mu = np.log(pred.total_duration)
+                pr = 1 - lognorm.cdf(time_gap, s=self.sigma, scale=np.exp(mu))
+                epc += pr * proj.weight  # 考虑项目权重
+                logging.debug(f"Sigle EPC for project {pred_id} from {proj.project_id}: {pr}")
+
+        return epc
+
+    def _get_all_predecessors(self, proj: Project, project_arcs: Set[Tuple[str, str]]) -> Set[str]:
+        """获取所有前驱项目（包括资源前驱）"""
+        all_preds = set()
+        to_process = list(proj.predecessors)
+
+        # 添加资源依赖前驱
+        for src, dst in project_arcs:
+            if dst == proj.project_id:
+                to_process.append(src)
+
+        while to_process:
+            current = to_process.pop()
+            if current not in all_preds:
+                all_preds.add(current)
+                if current in self.program.projects:
+                    to_process.extend(self.program.projects[current].predecessors)
+                    # 添加资源依赖前驱
+                    for src, dst in project_arcs:
+                        if dst == current:
+                            to_process.append(src)
+
+        return all_preds
+
+    def _calculate_lpl(self, start_id: str, end_id: str, project_arcs: Set[Tuple[str, str]]) -> int:
+        """
+        计算项目间最长路径长度（路径上中间项目工期之和）
+
+        Args:
+            start_id: 起始项目ID
+            end_id: 终止项目ID
+            project_arcs: 资源依赖关系集合
+
+        Returns:
+            int: 最长路径上中间项目（不包括起始和终止项目）工期之和
+        """
+        # 构建项目网络图
+        network = defaultdict(dict)
+
+        # 添加资源弧
+        for src, dst in project_arcs:
+            network[src][dst] = 0  # 资源弧的权重为0。计算工期的时候，可以不考虑资源弧
+
+        # 添加项目依赖边
+        for pid, proj in self.program.projects.items():
+            for succ_id in proj.successors:
+                network[pid][succ_id] = 0  # 边的权重初始化为0
+
+        # 记录每个项目的工期
+        durations = {
+            pid: proj.total_duration
+            for pid, proj in self.program.projects.items()
+        }
+
+        def dfs(current: str, target: str, visited: Set[str]) -> Tuple[int, List[str]]:
+            """
+            深度优先搜索，返回最长路径长度和路径
+
+            Returns:
+                Tuple[int, List[str]]: (路径长度, 路径上的项目ID列表)
+            """
+            if current == target:
+                return 0, [current]
+
+            if current in visited:
+                return float('-inf'), []
+
+            visited.add(current)
+            max_length = float('-inf')
+            best_path = []
+
+            # 遍历所有后继节点
+            for next_node in network[current]:
+                if next_node not in visited:
+                    sub_length, sub_path = dfs(next_node, target, visited)
+                    if sub_length != float('-inf'):
+                        # 如果是起始项目，不加入其工期
+                        if next_node != target:  # 只加入中间项目的工期
+                            current_length = sub_length + durations.get(next_node, 0)
+                        else:
+                            current_length = sub_length
+
+                        if current_length > max_length:
+                            max_length = current_length
+                            best_path = [current] + sub_path
+
+            visited.remove(current)
+            return max_length, best_path
+
+        # 计算最长路径
+        max_duration, path = dfs(start_id, end_id, set())
+
+        if max_duration == float('-inf'):
+            return 0
+
+        # 输出详细的路径信息用于调试
+        path_info = [
+            f"{pid}({self.program.projects[pid].total_duration})"
+            for pid in path
+            if pid in self.program.projects
+        ]
+
+        middle_projects_duration = sum(
+            self.program.projects[pid].total_duration
+            for pid in path[1:-1]  # 只取中间项目
+            if pid in self.program.projects
+        )
+
+        logging.debug(f"Path from {start_id} to {end_id}: {' -> '.join(path_info)}, "
+                      f"middle projects duration: {middle_projects_duration}")
+
+        return max_duration
+
+    def _insert_buffer(self, proj_id: str) -> bool:
+        """在项目前插入单位缓冲"""
+        project = self.program.projects.get(proj_id)
+        if not project:
+            return False
+
+        # 推迟项目开始时间
+        delay = 1
+        project.start_time += delay
+
+        # 更新所有后继项目的开始时间
+        self._update_successor_projects_time(proj_id, delay)
+
+        # 记录项目缓冲
+        self.project_buffers[proj_id] = self.project_buffers.get(proj_id, 0) + delay
+
         return True
 
-    def _is_robustness_improved(self) -> bool:
-        """检查鲁棒性是否提升（简化实现）"""
-        current_robustness = self._calculate_robustness(self.current_schedule)
-        best_robustness = self._calculate_robustness(self.best_schedule)
-        return current_robustness > best_robustness
+    def _remove_buffer(self, proj_id: str):
+        """移除项目的一个单位缓冲"""
+        project = self.program.projects.get(proj_id)
+        if not project:
+            return
 
-    def _calculate_robustness(self, program: Program) -> float:
-        """计算调度计划的鲁棒性（示例：基于缓冲总长度）"""
-        robustness = 0.0
-        for proj in program.projects.values():
-            for act in proj.activities.values():
-                robustness += (act.es - self.program.projects[proj.project_id].activities[act.activity_id].es)
-        return robustness
+        # 检查项目是否有缓冲
+        if proj_id in self.project_buffers and self.project_buffers[proj_id] > 0:
+            # 提前项目开始时间一个单位
+            project.start_time -= 1
+            # 更新后继项目时间
+            self._update_successor_projects_time(proj_id, -1)
+            # 减少缓冲记录
+            self.project_buffers[proj_id] -= 1
 
-    def _find_activity(self, act_id: int) -> Optional[Activity]:
-        """根据ID查找活动"""
-        for proj in self.current_schedule.projects.values():
-            if act_id in proj.activities:
-                return proj.activities[act_id]
-        return None
+            # 如果缓冲已全部移除,则删除记录
+            if self.project_buffers[proj_id] == 0:
+                self.project_buffers.pop(proj_id)
+
+    def _update_successor_projects_time(self, proj_id: str, delay: int):
+        """更新后继项目的开始时间"""
+        visited = set()
+        queue = deque([(proj_id, delay)])
+
+        while queue:
+            current_id, current_delay = queue.popleft()
+            if current_id in visited:
+                continue
+
+            visited.add(current_id)
+            current_proj = self.program.projects[current_id]
+
+            # 更新技术后继项目
+            for succ_id in current_proj.successors:
+                succ_proj = self.program.projects[succ_id]
+                succ_proj.start_time += current_delay
+                queue.append((succ_id, current_delay))
+
+            # 更新资源后继
+            for (src, dst, _, _) in self.resource_network["resource_arcs"]:
+                if src == current_id and dst in self.program.projects:
+                    # 改为直接推迟固定时间
+                    self.program.projects[dst].start_time += current_delay
+                    queue.append((dst, current_delay))
+
+    def _check_completion_time(self) -> bool:
+        """检查是否满足最大完工期限约束"""
+        max_completion = max(
+            proj.start_time + proj.total_duration
+            for proj in self.program.projects.values()
+        )
+        return max_completion <= self.max_completion_time
+
+    def _calculate_total_epc(self) -> float:
+        """计算当前调度方案的总EPC"""
+        return sum(self._calculate_all_projects_epc().values())
