@@ -1762,26 +1762,32 @@ class STCAlgorithm:
         visited = set()
         queue = deque([(proj_id, delay)])
 
+        # 构建完整的后继项目集合
+        successor_map = defaultdict(set)
+
+        # 初始化技术后继关系
+        for project in self.program.projects.values():
+            successor_map[project.project_id].update(project.successors)
+
+        # 添加资源后继关系
+        for src, dst, _, _ in self.resource_network["resource_arcs"]:
+            successor_map[src].add(dst)
+
         while queue:
             current_id, current_delay = queue.popleft()
             if current_id in visited:
                 continue
 
             visited.add(current_id)
-            current_proj = self.program.projects[current_id]
 
-            # 更新技术后继项目
-            for succ_id in current_proj.successors:
-                succ_proj = self.program.projects[succ_id]
-                succ_proj.start_time += current_delay
-                queue.append((succ_id, current_delay))
+            # 获取所有后继（包括技术后继和资源后继）
+            successors = successor_map[current_id]
 
-            # 更新资源后继
-            for (src, dst, _, _) in self.resource_network["resource_arcs"]:
-                if src == current_id and dst in self.program.projects:
-                    # 改为直接推迟固定时间
-                    self.program.projects[dst].start_time += current_delay
-                    queue.append((dst, current_delay))
+            # 更新所有后继项目
+            for succ_id in successors:
+                if succ_id in self.program.projects:  # 确保项目存在
+                    self.program.projects[succ_id].start_time += current_delay
+                    queue.append((succ_id, current_delay))
 
     def _check_completion_time(self) -> bool:
         """检查是否满足最大完工期限约束"""

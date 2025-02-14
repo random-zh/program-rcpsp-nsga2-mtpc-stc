@@ -144,11 +144,12 @@ def main():
     stc_dir = res_dir / "stc"
     stc_dir.mkdir()
 
-    # 计算最大允许完工期限（1.2倍基准工期）
+    # 计算最大允许完工期限（1.3倍基准工期）
     max_duration = max(
-        sum(act.duration for act in proj.activities.values())
+        proj.start_time
         for proj in program.projects.values()
     )
+    program.total_duration = max_duration
     max_completion_time = int(max_duration * 1.3)
 
     # 运行STC算法（使用MTPC的资源流结果）
