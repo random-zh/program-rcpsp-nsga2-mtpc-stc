@@ -61,7 +61,8 @@ class Activity(object):
             "duration": self.duration,
             "resource_request": self.resource_request,
             "predecessors": self.predecessors,
-            "successors": self.successors
+            "successors": self.successors,
+            "start_time": self.start_time,
         }
 
 
@@ -109,7 +110,9 @@ class Project:
             "weight": self.weight,
             "buffered_start_time": self.buffered_start_time,
             "project_epc": self.project_epc,
-            "buffer_size": self.buffer_size
+            "buffer_size": self.buffer_size,
+            "global_resources_request": self.global_resources_request,
+            "total_duration": self.total_duration
         }
 
     # === 方法定义 ===

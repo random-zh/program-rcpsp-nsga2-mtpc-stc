@@ -1761,6 +1761,7 @@ class STCAlgorithm:
         """更新后继项目的开始时间"""
         visited = set()
         queue = deque([(proj_id, delay)])
+        updated = set()
 
         # 构建完整的后继项目集合
         successor_map = defaultdict(set)
@@ -1786,8 +1787,10 @@ class STCAlgorithm:
             # 更新所有后继项目
             for succ_id in successors:
                 if succ_id in self.program.projects:  # 确保项目存在
-                    self.program.projects[succ_id].start_time += current_delay
-                    queue.append((succ_id, current_delay))
+                    if succ_id not in updated:
+                        self.program.projects[succ_id].start_time += current_delay
+                        queue.append((succ_id, current_delay))
+                        updated.add(succ_id)
 
     def _check_completion_time(self) -> bool:
         """检查是否满足最大完工期限约束"""

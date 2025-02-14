@@ -52,6 +52,10 @@ class ProgramSimulator:
         project.weight = project_data["weight"]
         project.total_duration = project_data.get("total_duration")
 
+        # 资源需求不为none时，添加资源需求
+        if project_data.get("global_resources_request") is not None:
+            project.global_resources_request = project_data.get("global_resources_request").get("global 1")
+
         # 添加缓冲相关信息
         project.buffered_start_time = project_data.get("buffered_start_time")
         project.project_epc = project_data.get("project_epc")
@@ -73,10 +77,11 @@ class ProgramSimulator:
 
         # 拼接文件路径
         filepatha = project_root / filepath
-        filepathb = 'F:\\学习资料\\final_program.json'
-        with open(filepathb, 'r') as f:
+        filepathc = "data/c_final_program.json"
+        filepathb = "D:\File\c_final_program.json"
+        filepathd = filepath
+        with open(filepathd, 'r') as f:
             data = json.load(f)
-
         # 创建Program对象
         program = Program(
             program_id=data["program_id"],
@@ -121,6 +126,7 @@ class SimulationStats:
             "TPCT": self.tpct
         }
 
+
 class SimulationRunner:
     """项目群蒙特卡洛仿真执行器"""
 
@@ -133,6 +139,10 @@ class SimulationRunner:
         self.project_stats: Dict[str, Dict[float, SimulationStats]] = {}
         self.mtpc_stats: Dict[float, SimulationStats] = {}
         self.stc_stats: Dict[float, SimulationStats] = {}
+
+        # 存储项目仿真的详细结果
+        # project_id -> sigma -> simulation_index -> duration
+        self.project_durations: Dict[str, Dict[float, List[int]]] = defaultdict(lambda: defaultdict(list))
 
     def run(self) -> None:
         """执行完整的仿真实验"""
@@ -168,17 +178,25 @@ class SimulationRunner:
         cpsc_values = []
         on_time_count = 0
 
-        # 将项目的共享资源需求更新为第一个活动的资源限制
-        first_resource = next(iter(project.local_resources.items()))[1]
-        project.global_resources_request = {"global 1": first_resource}
+        # 获取项目的共享资源需求
+        shared_resource_demand = project.global_resources_request
 
-        baseline_completion = project.start_time + project.total_duration
+        # 更新项目活动的第一种资源的限量为共享资源需求
+        first_resource_type = next(iter(project.local_resources.keys()))
+        project.local_resources[first_resource_type] = shared_resource_demand
 
-        for _ in range(self.n_simulations):
+
+        # baseline_completion = project.start_time + project.total_duration
+
+        for sim_index in range(self.n_simulations):
             # 执行单次仿真
             actual_start_times, actual_completion = self._simulate_project_execution(
                 project, sigma
             )
+
+            # 保存项目工期
+            duration = actual_completion
+            self.project_durations[project.project_id][sigma].append(duration)
 
             # 计算CPSC
             cpsc = self._calculate_cpsc(project, actual_start_times)
@@ -188,7 +206,7 @@ class SimulationRunner:
             completion_times.append(actual_completion)
 
             # 检查是否按时完成
-            if actual_completion <= baseline_completion:
+            if actual_completion <= project.total_duration:
                 on_time_count += 1
 
         # 计算统计指标
@@ -210,10 +228,10 @@ class SimulationRunner:
             for proj in self.program.projects.values()
         )
 
-        for _ in range(self.n_simulations):
+        for sim_index in range(self.n_simulations):
             # 执行项目群仿真
             project_starts, actual_completion = self._simulate_program_execution(
-                self.program, sigma, use_buffers=False
+                self.program, sigma, sim_index, use_buffers=False
             )
 
             # 计算CPSC
@@ -243,10 +261,10 @@ class SimulationRunner:
 
         baseline_completion = self.program.buffered_completion_time
 
-        for _ in range(self.n_simulations):
+        for sim_index in range(self.n_simulations):
             # 执行项目群仿真
             project_starts, actual_completion = self._simulate_program_execution(
-                self.program, sigma, use_buffers=True
+                self.program, sigma,sim_index, use_buffers=True,
             )
 
             # 计算CPSC
@@ -299,17 +317,16 @@ class SimulationRunner:
             # 设置活动实际开始时间
             actual_start_times[act_id] = earliest_start
 
-        # 计算项目实际完成时间
+        # 计算项目实际完成时间， 实际开始时间（已经进行了工期仿真）+活动工期
         completion_time = 0
         for act_id, start_time in actual_start_times.items():
             activity = project.activities[act_id]
-            duration = self._generate_duration(activity.duration, sigma)
-            completion_time = max(completion_time, start_time + duration)
+            completion_time = max(completion_time, start_time + activity.duration)
 
         return actual_start_times, completion_time
 
     def _simulate_program_execution(
-            self, program: Program, sigma: float, use_buffers: bool = False
+            self, program: Program, sigma: float, sim_index: int, use_buffers: bool = False
     ) -> Tuple[Dict[str, int], int]:
         """模拟项目群的执行过程"""
         project_start_times = {}  # 项目实际开始时间
@@ -336,18 +353,24 @@ class SimulationRunner:
                 project_durations[proj_id] = 0
                 continue
 
-            # 确定最早可开始时间（考虑前驱项目）
+            # 获取所有前驱项目（技术前驱 + 资源前驱）
+            all_predecessors = set(project.predecessors)  # 技术前驱
+
+            # 添加资源前驱
+            for src, dst, _, _ in self.program.resource_arcs:
+                if dst == proj_id:
+                    all_predecessors.add(src)
+
+            # 确定最早可开始时间
             earliest_start = project_start_times[proj_id]
-            for pred_id in project.predecessors:
+            for pred_id in all_predecessors:
                 if pred_id in project_start_times:
                     pred_end = (project_start_times[pred_id] +
                               project_durations.get(pred_id, 0))
                     earliest_start = max(earliest_start, pred_end)
 
-            # 模拟项目执行获取实际工期
-            _, completion_time = self._simulate_project_execution(project, sigma)
-            duration = completion_time - project.start_time
-            project_durations[proj_id] = duration
+            # 使用之前保存的项目仿真结果
+            project_durations[proj_id] = self.project_durations[proj_id][sigma][sim_index]
 
             # 更新项目开始时间
             project_start_times[proj_id] = earliest_start
@@ -391,8 +414,8 @@ class SimulationRunner:
             if proj_id not in ["1_virtual", "13_virtual"]:
                 project = program.projects[proj_id]
                 planned_start = (project.buffered_start_time
-                               if project.buffered_start_time is not None
-                               else project.start_time)
+                                 if project.buffered_start_time is not None
+                                 else project.start_time)
                 # 项目权重为1
                 cpsc += abs(actual_start - planned_start)
         return cpsc
@@ -449,21 +472,9 @@ def run_simulations(program_path: str) -> None:
     simulator.load_result(Path(program_path))
     program = simulator.program
 
-    # MTPC基准情况
     runner = SimulationRunner(program)
-    runner.scenario = "mtpc"
     runner.run()
-
-    # STC缓冲情况
-    stc_program = deepcopy(program)
-    for proj in stc_program.projects.values():
-        if proj.buffer_size:
-            proj.start_time = proj.buffered_start_time
-
-    stc_runner = SimulationRunner(stc_program)
-    stc_runner.scenario = "stc"
-    stc_runner.run()
 
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO)
-    run_simulations("data/final_program.json")
+    run_simulations("data/c_final_program.json")

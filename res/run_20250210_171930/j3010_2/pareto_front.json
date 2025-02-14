@@ -1,0 +1,482 @@
+[
+  {
+    "makespan": 55,
+    "robustness": 29.947999018263268,
+    "front": 0,
+    "is_knee": false
+  },
+  {
+    "makespan": 68,
+    "robustness": 38.80039422430015,
+    "front": 0,
+    "is_knee": false
+  },
+  {
+    "makespan": 68,
+    "robustness": 38.80039422430015,
+    "front": 0,
+    "is_knee": false
+  },
+  {
+    "makespan": 55,
+    "robustness": 29.947999018263268,
+    "front": 0,
+    "is_knee": false
+  },
+  {
+    "makespan": 57,
+    "robustness": 34.62093873095357,
+    "front": 0,
+    "is_knee": true
+  },
+  {
+    "makespan": 56,
+    "robustness": 32.32588549297039,
+    "front": 0,
+    "is_knee": false
+  },
+  {
+    "makespan": 56,
+    "robustness": 32.32588549297039,
+    "front": 0,
+    "is_knee": false
+  },
+  {
+    "makespan": 63,
+    "robustness": 35.6593390573262,
+    "front": 0,
+    "is_knee": false
+  },
+  {
+    "makespan": 64,
+    "robustness": 35.85919307667276,
+    "front": 0,
+    "is_knee": false
+  },
+  {
+    "makespan": 65,
+    "robustness": 38.06492382939024,
+    "front": 0,
+    "is_knee": false
+  },
+  {
+    "makespan": 59,
+    "robustness": 34.781738546644654,
+    "front": 0,
+    "is_knee": false
+  },
+  {
+    "makespan": 59,
+    "robustness": 34.781738546644654,
+    "front": 0,
+    "is_knee": false
+  },
+  {
+    "makespan": 66,
+    "robustness": 38.629396918565455,
+    "front": 0,
+    "is_knee": false
+  },
+  {
+    "makespan": 63,
+    "robustness": 35.6593390573262,
+    "front": 0,
+    "is_knee": false
+  },
+  {
+    "makespan": 65,
+    "robustness": 38.06492382939024,
+    "front": 0,
+    "is_knee": false
+  },
+  {
+    "makespan": 64,
+    "robustness": 35.85919307667276,
+    "front": 0,
+    "is_knee": false
+  },
+  {
+    "makespan": 66,
+    "robustness": 38.629396918565455,
+    "front": 0,
+    "is_knee": false
+  },
+  {
+    "makespan": 57,
+    "robustness": 34.62093873095357,
+    "front": 0,
+    "is_knee": false
+  },
+  {
+    "makespan": 68,
+    "robustness": 38.80039422430015,
+    "front": 0,
+    "is_knee": false
+  },
+  {
+    "makespan": 55,
+    "robustness": 29.947999018263268,
+    "front": 0,
+    "is_knee": false
+  },
+  {
+    "makespan": 56,
+    "robustness": 32.32588549297039,
+    "front": 0,
+    "is_knee": false
+  },
+  {
+    "makespan": 59,
+    "robustness": 34.781738546644654,
+    "front": 0,
+    "is_knee": false
+  },
+  {
+    "makespan": 63,
+    "robustness": 35.6593390573262,
+    "front": 0,
+    "is_knee": false
+  },
+  {
+    "makespan": 65,
+    "robustness": 38.06492382939024,
+    "front": 0,
+    "is_knee": false
+  },
+  {
+    "makespan": 64,
+    "robustness": 35.85919307667276,
+    "front": 0,
+    "is_knee": false
+  },
+  {
+    "makespan": 66,
+    "robustness": 38.629396918565455,
+    "front": 0,
+    "is_knee": false
+  },
+  {
+    "makespan": 57,
+    "robustness": 34.62093873095357,
+    "front": 0,
+    "is_knee": false
+  },
+  {
+    "makespan": 68,
+    "robustness": 38.80039422430015,
+    "front": 0,
+    "is_knee": false
+  },
+  {
+    "makespan": 55,
+    "robustness": 29.947999018263268,
+    "front": 0,
+    "is_knee": false
+  },
+  {
+    "makespan": 56,
+    "robustness": 32.32588549297039,
+    "front": 0,
+    "is_knee": false
+  },
+  {
+    "makespan": 59,
+    "robustness": 34.781738546644654,
+    "front": 0,
+    "is_knee": false
+  },
+  {
+    "makespan": 63,
+    "robustness": 35.6593390573262,
+    "front": 0,
+    "is_knee": false
+  },
+  {
+    "makespan": 65,
+    "robustness": 38.06492382939024,
+    "front": 0,
+    "is_knee": false
+  },
+  {
+    "makespan": 64,
+    "robustness": 35.85919307667276,
+    "front": 0,
+    "is_knee": false
+  },
+  {
+    "makespan": 66,
+    "robustness": 38.629396918565455,
+    "front": 0,
+    "is_knee": false
+  },
+  {
+    "makespan": 57,
+    "robustness": 34.62093873095357,
+    "front": 0,
+    "is_knee": false
+  },
+  {
+    "makespan": 68,
+    "robustness": 38.80039422430015,
+    "front": 0,
+    "is_knee": false
+  },
+  {
+    "makespan": 55,
+    "robustness": 29.947999018263268,
+    "front": 0,
+    "is_knee": false
+  },
+  {
+    "makespan": 56,
+    "robustness": 32.32588549297039,
+    "front": 0,
+    "is_knee": false
+  },
+  {
+    "makespan": 59,
+    "robustness": 34.781738546644654,
+    "front": 0,
+    "is_knee": false
+  },
+  {
+    "makespan": 63,
+    "robustness": 35.6593390573262,
+    "front": 0,
+    "is_knee": false
+  },
+  {
+    "makespan": 65,
+    "robustness": 38.06492382939024,
+    "front": 0,
+    "is_knee": false
+  },
+  {
+    "makespan": 64,
+    "robustness": 35.85919307667276,
+    "front": 0,
+    "is_knee": false
+  },
+  {
+    "makespan": 66,
+    "robustness": 38.629396918565455,
+    "front": 0,
+    "is_knee": false
+  },
+  {
+    "makespan": 57,
+    "robustness": 34.62093873095357,
+    "front": 0,
+    "is_knee": false
+  },
+  {
+    "makespan": 68,
+    "robustness": 38.80039422430015,
+    "front": 0,
+    "is_knee": false
+  },
+  {
+    "makespan": 55,
+    "robustness": 29.947999018263268,
+    "front": 0,
+    "is_knee": false
+  },
+  {
+    "makespan": 56,
+    "robustness": 32.32588549297039,
+    "front": 0,
+    "is_knee": false
+  },
+  {
+    "makespan": 59,
+    "robustness": 34.781738546644654,
+    "front": 0,
+    "is_knee": false
+  },
+  {
+    "makespan": 63,
+    "robustness": 35.6593390573262,
+    "front": 0,
+    "is_knee": false
+  },
+  {
+    "makespan": 65,
+    "robustness": 38.06492382939024,
+    "front": 0,
+    "is_knee": false
+  },
+  {
+    "makespan": 64,
+    "robustness": 35.85919307667276,
+    "front": 0,
+    "is_knee": false
+  },
+  {
+    "makespan": 66,
+    "robustness": 38.629396918565455,
+    "front": 0,
+    "is_knee": false
+  },
+  {
+    "makespan": 57,
+    "robustness": 34.62093873095357,
+    "front": 0,
+    "is_knee": false
+  },
+  {
+    "makespan": 68,
+    "robustness": 38.80039422430015,
+    "front": 0,
+    "is_knee": false
+  },
+  {
+    "makespan": 55,
+    "robustness": 29.947999018263268,
+    "front": 0,
+    "is_knee": false
+  },
+  {
+    "makespan": 56,
+    "robustness": 32.32588549297039,
+    "front": 0,
+    "is_knee": false
+  },
+  {
+    "makespan": 59,
+    "robustness": 34.781738546644654,
+    "front": 0,
+    "is_knee": false
+  },
+  {
+    "makespan": 63,
+    "robustness": 35.6593390573262,
+    "front": 0,
+    "is_knee": false
+  },
+  {
+    "makespan": 65,
+    "robustness": 38.06492382939024,
+    "front": 0,
+    "is_knee": false
+  },
+  {
+    "makespan": 64,
+    "robustness": 35.85919307667276,
+    "front": 0,
+    "is_knee": false
+  },
+  {
+    "makespan": 66,
+    "robustness": 38.629396918565455,
+    "front": 0,
+    "is_knee": false
+  },
+  {
+    "makespan": 57,
+    "robustness": 34.62093873095357,
+    "front": 0,
+    "is_knee": false
+  },
+  {
+    "makespan": 68,
+    "robustness": 38.80039422430015,
+    "front": 0,
+    "is_knee": false
+  },
+  {
+    "makespan": 55,
+    "robustness": 29.947999018263268,
+    "front": 0,
+    "is_knee": false
+  },
+  {
+    "makespan": 59,
+    "robustness": 34.781738546644654,
+    "front": 0,
+    "is_knee": false
+  },
+  {
+    "makespan": 63,
+    "robustness": 35.6593390573262,
+    "front": 0,
+    "is_knee": false
+  },
+  {
+    "makespan": 65,
+    "robustness": 38.06492382939024,
+    "front": 0,
+    "is_knee": false
+  },
+  {
+    "makespan": 64,
+    "robustness": 35.85919307667276,
+    "front": 0,
+    "is_knee": false
+  },
+  {
+    "makespan": 66,
+    "robustness": 38.629396918565455,
+    "front": 0,
+    "is_knee": false
+  },
+  {
+    "makespan": 57,
+    "robustness": 34.62093873095357,
+    "front": 0,
+    "is_knee": false
+  },
+  {
+    "makespan": 68,
+    "robustness": 38.80039422430015,
+    "front": 0,
+    "is_knee": false
+  },
+  {
+    "makespan": 55,
+    "robustness": 29.947999018263268,
+    "front": 0,
+    "is_knee": false
+  },
+  {
+    "makespan": 59,
+    "robustness": 34.781738546644654,
+    "front": 0,
+    "is_knee": false
+  },
+  {
+    "makespan": 63,
+    "robustness": 35.6593390573262,
+    "front": 0,
+    "is_knee": false
+  },
+  {
+    "makespan": 65,
+    "robustness": 38.06492382939024,
+    "front": 0,
+    "is_knee": false
+  },
+  {
+    "makespan": 64,
+    "robustness": 35.85919307667276,
+    "front": 0,
+    "is_knee": false
+  },
+  {
+    "makespan": 66,
+    "robustness": 38.629396918565455,
+    "front": 0,
+    "is_knee": false
+  },
+  {
+    "makespan": 55,
+    "robustness": 29.947999018263268,
+    "front": 0,
+    "is_knee": false
+  },
+  {
+    "makespan": 68,
+    "robustness": 38.80039422430015,
+    "front": 0,
+    "is_knee": false
+  }
+]

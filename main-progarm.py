@@ -174,7 +174,7 @@ def main():
     )
 
     # 保存最终的program信息（包含资源流和缓冲信息）
-    program.save_to_json(res_dir / "final_program.json")
+    program.save_to_json(res_dir / "c_final_program.json")
 
     logging.info(f"All phases completed! Results saved to: {res_dir}")
 
