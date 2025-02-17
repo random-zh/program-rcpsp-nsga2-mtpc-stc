@@ -2,8 +2,8 @@
 
 algorithm:
   name: "NSGA-II"
-  population_size: 80
-  generations: 100
+  population_size: 60
+  generations: 300
   crossover_probability: 0.9
   mutation_probability: 0.2
   selection: "tournament"
@@ -38,6 +38,6 @@ program:
 
 
 file:
-  j30_fil_num: 50
+  j30_fil_num: 1
   j60_fil_num: 20
   filelist: ["j3017_3", "j3010_9", "j301_1", "j3020_1", "j3048_3", "j308_3", "j3035_2", "j6039_9", "j6046_4", "j609_10", "j6042_8"]
